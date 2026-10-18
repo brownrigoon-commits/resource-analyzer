@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#10151e">
+  <title>자원 분석기</title>
+  <link rel="stylesheet" href="/style.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <div class="app-shell">
+    <header class="app-header">
+      <div class="brand"><div class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></div><div><p class="eyebrow">LOCAL RESOURCE MONITOR</p><h1>자원 분석기</h1></div></div>
+      <div class="header-status"><a class="home-link" href="/">← 처음으로</a><span class="read-only">읽기 전용</span><span id="live-status" class="live-status waiting"><i></i>연결 중</span><span id="last-update" class="muted">첫 측정 대기</span></div>
+    </header>
+
+    <main>
+      <section class="overview" aria-labelledby="overview-title">
+        <div class="section-heading"><div><h2 id="overview-title">이 컴퓨터, 지금</h2><p id="hardware-summary" class="subtle">실제 실행 중인 프로그램의 자원 사용량을 확인합니다.</p></div><span class="poll-label">약 1초 측정·갱신 · 15초 요약 저장 · 최근 7일 보관</span></div>
+        <div id="metric-grid" class="metric-grid">
+          <article class="metric-card cpu"><div class="metric-label"><span><i></i>CPU</span><span id="cpu-context" class="metric-context">전체 처리 용량</span></div><div class="metric-value"><strong id="cpu-value">—</strong><span>%</span></div><div id="cpu-spark" class="sparkline" aria-hidden="true"></div><p id="cpu-detail">측정 대기 중</p></article>
+          <article class="metric-card gpu"><div class="metric-label"><span><i></i>GPU</span><span id="gpu-context" class="metric-context">그래픽 연산</span></div><div class="metric-value"><strong id="gpu-value">—</strong><span id="gpu-unit">%</span></div><div id="gpu-spark" class="sparkline" aria-hidden="true"></div><p id="gpu-detail">측정 대기 중</p></article>
+          <article class="metric-card ram"><div class="metric-label"><span><i></i>메모리</span><span class="metric-context">RAM</span></div><div class="metric-value"><strong id="ram-value">—</strong><span>%</span></div><div id="ram-spark" class="sparkline" aria-hidden="true"></div><p id="ram-detail">측정 대기 중</p></article>
+          <article class="metric-card disk"><div class="metric-label"><span><i></i>디스크</span><span class="metric-context">물리 디스크 전송량</span></div><div class="metric-value"><strong id="disk-value">—</strong><span>MiB/s</span></div><div id="disk-spark" class="sparkline" aria-hidden="true"></div><p id="disk-detail">측정 대기 중</p></article>
+        </div>
+        <p class="metric-footnote">CPU·GPU·메모리 %는 각각의 최대 용량 기준이며, 서로 더해 100%가 되는 비율이 아닙니다.</p>
+      </section>
+
+      <section class="analysis-grid">
+        <article class="panel chart-panel" aria-labelledby="trend-title">
+          <div class="panel-heading" style="flex-wrap:wrap"><div><h2 id="trend-title">자원 사용 추이</h2><p id="chart-caption" class="subtle">실시간 측정을 기다리고 있습니다.</p></div><div class="range-switch" role="group" aria-label="기록 기간"><button type="button" data-live-range class="active" aria-pressed="true">실시간 60초</button><button type="button" data-minutes="60" aria-pressed="false">1시간</button><button type="button" data-minutes="1440" aria-pressed="false">24시간</button><button type="button" data-minutes="10080" aria-pressed="false">7일</button></div></div>
+          <div class="chart-legend" id="chart-legend" aria-label="그래프 항목"><button data-series="cpu_pct" aria-pressed="true"><i class="cpu-dot"></i>CPU</button><button data-series="gpu_pct" aria-pressed="true"><i class="gpu-dot"></i>GPU</button><button data-series="ram_pct" aria-pressed="true"><i class="ram-dot"></i>메모리</button><button data-series="vram_pct" aria-pressed="false" class="off"><i class="vram-dot"></i>GPU 메모리</button></div>
+          <div id="chart-wrap" class="chart-wrap"><svg id="history-chart" viewBox="0 0 760 230" role="img" aria-label="최근 자원 사용률 추이 그래프"></svg><div id="chart-empty" class="chart-empty">첫 기록을 기다리고 있습니다.</div><div id="chart-tooltip" class="chart-tooltip" hidden></div></div>
+          <div class="chart-bottom"><span id="recording-detail"><i class="record-dot"></i>로컬 기록 준비 중</span><span>15초 요약 · <b id="retention-days">7</b>일 보관</span></div>
+          <div id="pressure-summary" class="pressure-summary">높은 부하가 관측된 비율은 기록이 쌓이면 표시됩니다.</div>
+        </article>
+        <aside class="panel insight-panel" aria-labelledby="insights-title"><div class="panel-heading"><div><p class="eyebrow">RESOURCE INSIGHTS</p><h2 id="insights-title">사용 패턴 분석</h2></div><span class="mini-label">측정 기반</span></div><div id="insights" class="insights"><div class="insight"><span class="insight-icon">i</span><div><h3>관측 준비 중</h3><p>실제 사용 기록이 쌓이면 병목 징후를 표시합니다.</p></div></div></div><p class="insight-note">GPU 100%만으로 교체나 추가 장착을 권하지 않습니다. 지속 시간·메모리·작업 속도와 함께 판단합니다.</p></aside>
+      </section>
+
+      <section class="panel programs-panel" aria-labelledby="programs-title">
+        <div class="panel-heading programs-heading"><div><h2 id="programs-title">프로그램별 자원 사용</h2><p class="subtle">관련 프로세스를 프로그램 단위로 묶어 표시합니다.</p></div><div class="table-actions"><label class="search"><span aria-hidden="true">⌕</span><input id="program-search" type="search" placeholder="프로그램 검색" aria-label="프로그램 이름 검색" autocomplete="off"></label><details class="export-menu"><summary><span aria-hidden="true">↓</span> CSV 저장</summary><div><a id="export-system" href="/api/export.csv?kind=system&amp;minutes=60" download>전체 자원 기록</a><a id="export-groups" href="/api/export.csv?kind=groups&amp;minutes=60" download>프로그램별 기록</a></div></details></div></div>
+        <div class="table-toolbar"><div class="table-tabs" role="group" aria-label="프로그램 표 종류"><button id="tab-live" data-mode="live" class="active" aria-pressed="true">실시간</button><button id="tab-history" data-mode="history" aria-pressed="false">누적 분석</button></div><span id="program-count" class="subtle">측정 대기 중</span></div>
+        <div class="table-scroll" tabindex="0" aria-label="프로그램별 사용량 표, 가로 스크롤 가능"><table id="program-table"><thead id="program-thead"></thead><tbody id="program-tbody"><tr><td class="table-empty">프로그램 정보를 불러오는 중입니다.</td></tr></tbody></table></div>
+        <div id="table-summary" class="table-summary">프로그램을 선택하면 개별 프로세스 사용량을 볼 수 있습니다.</div>
+        <div class="measurement-notes"><p><b>측정 기준</b> CPU는 전체 논리 프로세서 기준으로 정규화합니다. 프로그램 메모리는 작업 집합의 합계로 공유 메모리가 중복될 수 있습니다.</p><p>전체 GPU 카드는 NVIDIA 장치, 프로그램 GPU는 Windows가 보고하는 엔진 기준입니다. 대상 장치·엔진 집계·표본 시점 차이로 프로그램 합계와 전체 값이 다를 수 있습니다.</p><p>프로그램 I/O는 파일·장치의 논리 I/O로, 위의 물리 디스크 전송량과 다릅니다. <b>— 는 미측정입니다.</b></p></div>
+      </section>
+
+      <section class="details-grid" id="device-details">
+        <article class="panel device-panel" aria-labelledby="devices-title"><div class="panel-heading"><h2 id="devices-title">GPU와 저장 공간</h2><span class="mini-label">현재 용량</span></div><div id="gpu-devices" class="gpu-devices"><p class="subtle">장치 정보 대기 중</p></div><div id="disk-devices" class="disk-devices"></div></article>
+        <article id="voice-panel" class="panel voice-panel" aria-labelledby="voice-title" hidden><div class="panel-heading"><h2 id="voice-title">마이시아 음성 생성</h2><span id="voice-state" class="mini-label">상태 확인 중</span></div><div id="voice-content"><p class="subtle">기존 작업의 상태 기록을 읽고 있습니다.</p></div><p class="voice-note">현재 생성 작업을 종료하거나 설정을 바꾸지 않습니다.</p></article>
+      </section>
+      <div id="errors-banner" class="errors-banner" hidden></div>
+    </main>
+    <footer><span>자원 분석기 <span class="footer-divider">/</span> 이 PC에서 수집·저장</span><span>프로세스 종료·성능 설정 변경 기능 없음</span></footer>
+  </div>
+  <dialog id="process-dialog"><div class="dialog-top"><div><p class="eyebrow">PROCESS DETAILS</p><h2 id="dialog-title">프로세스 상세</h2><p id="dialog-subtitle" class="subtle"></p></div><button id="dialog-close" type="button" aria-label="프로세스 상세 닫기">×</button></div><div class="dialog-stats" id="dialog-stats"></div><div class="table-scroll"><table class="process-table"><thead><tr><th>프로세스 / PID</th><th>CPU</th><th>메모리</th><th>GPU</th><th>I/O</th></tr></thead><tbody id="process-tbody"></tbody></table></div><p class="dialog-note">실행 파일명과 필요한 스크립트 이름만 표시합니다. 전체 명령행이나 인증정보는 표시하지 않습니다.</p></dialog>
+</body>
+</html>

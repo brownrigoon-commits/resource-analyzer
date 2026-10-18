@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#10151e">
+  <title>자원 분석기</title>
+  <link rel="stylesheet" href="/welcome.css">
+  <script src="/welcome.js" defer></script>
+</head>
+<body>
+  <div class="shell">
+    <header><a class="brand" href="/" aria-label="자원 분석기 처음으로"><span class="mark" aria-hidden="true"><i></i><i></i><i></i></span>자원 분석기</a><span class="local-badge"><i></i>내 컴퓨터에서 실행 중</span></header>
+    <main>
+      <section class="hero" aria-labelledby="hero-title">
+        <p class="eyebrow">KNOW YOUR COMPUTER</p>
+        <h1 id="hero-title">내 컴퓨터의 자원,<br><em>어디에 쓰이고 있을까요?</em></h1>
+        <p class="intro">어떤 프로그램이 CPU, GPU, 메모리와 디스크를 사용하는지<br class="wide-only"> 실시간으로 살펴보고, 내 작업에 필요한 성능을 알아보세요.</p>
+        <button id="start-analysis" class="primary" type="button"><span class="button-label">내 컴퓨터 분석하기</span><span class="button-arrow" aria-hidden="true">→</span></button>
+        <p id="start-status" class="start-status" role="status" aria-live="polite">버튼을 누르면 자원 사용량 측정을 시작합니다.</p>
+        <noscript><p class="error">분석을 시작하려면 브라우저에서 JavaScript를 켜 주세요.</p></noscript>
+      </section>
+      <section class="resources" aria-label="분석하는 자원">
+        <article class="resource cpu"><span class="resource-symbol" aria-hidden="true">C</span><h2>CPU</h2><p>프로그램의 연산이<br>얼마나 집중되는지</p></article>
+        <article class="resource gpu"><span class="resource-symbol" aria-hidden="true">G</span><h2>GPU</h2><p>그래픽·AI 작업과<br>전용 메모리의 사용량</p></article>
+        <article class="resource ram"><span class="resource-symbol" aria-hidden="true">M</span><h2>메모리</h2><p>작업 공간에<br>여유가 얼마나 있는지</p></article>
+        <article class="resource disk"><span class="resource-symbol" aria-hidden="true">D</span><h2>디스크</h2><p>데이터 전송량과<br>저장 공간의 여유</p></article>
+      </section>
+      <section class="benefits" aria-label="분석 기능"><div><span>01</span><h2>지금의 흐름을 보기</h2><p>약 1초마다 갱신되는 사용량을<br>프로그램별로 비교합니다.</p></div><div><span>02</span><h2>기록으로 판단하기</h2><p>최근 7일의 추이를 살펴보고<br>필요한 기록은 CSV로 저장합니다.</p></div><div><span>03</span><h2>내 PC 안에 보관하기</h2><p>분석 기록은 이 컴퓨터에 저장되며<br>외부 서버로 전송하지 않습니다.</p></div></section>
+      <p class="note">순간적인 높은 사용률만으로 부품 교체를 권하지 않습니다. 반복되는 사용 패턴과 실제 작업 속도를 함께 살펴보세요.</p>
+    </main>
+    <footer><span>자원 분석기</span><span>Windows용 로컬 분석기 · 기존 작업을 유지하며 측정</span></footer>
+  </div>
+</body>
+</html>

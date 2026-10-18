@@ -1,0 +1,63 @@
+# Local measurements, exports, logs, and personal settings
+/data/
+/logs/
+/exports/
+/private/
+/local/
+*.sqlite
+*.sqlite3
+*.sqlite-*
+*.sqlite3-*
+*.db
+*.db-*
+*.log
+*.csv
+*.env
+.env.*
+!.env.example
+*.local.json
+local-settings*
+STOP
+
+# Local validation artifacts and captured screens
+/work/
+/outputs/
+/artifacts/
+/screenshots/
+/captures/
+/validation/
+resource-monitor*.png
+*-screenshot.png
+*_screenshot.png
+*-validation.json
+*_validation.json
+hardware-samples*.json
+
+# Python environments and caches
+/.venv/
+/.venv-build/
+/venv/
+/env/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Release binaries are published as release assets
+/build/
+/dist/
+*.exe
+*.msi
+*.pdb
+
+# Editor and operating-system files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+*.tmp
+*.bak
