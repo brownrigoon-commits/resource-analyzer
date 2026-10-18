@@ -18,6 +18,11 @@
 *.local.json
 local-settings*
 STOP
+governor.json
+governor.lock
+launcher-*.lock
+monitor.pid
+/ipc/
 
 # Local validation artifacts and captured screens
 /work/

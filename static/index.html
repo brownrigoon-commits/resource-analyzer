@@ -8,12 +8,13 @@
   <title>자원 분석기</title>
   <link rel="stylesheet" href="/style.css">
   <script src="/app.js" defer></script>
+  <script src="/governor.js" defer></script>
 </head>
 <body>
   <div class="app-shell">
     <header class="app-header">
       <div class="brand"><div class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></div><div><p class="eyebrow">LOCAL RESOURCE MONITOR</p><h1>자원 분석기</h1></div></div>
-      <div class="header-status"><a class="home-link" href="/">← 처음으로</a><span class="read-only">읽기 전용</span><span id="live-status" class="live-status waiting"><i></i>연결 중</span><span id="last-update" class="muted">첫 측정 대기</span></div>
+      <div class="header-status"><a class="home-link" href="/">← 처음으로</a><span class="read-only">로컬 측정·분배</span><span id="live-status" class="live-status waiting"><i></i>연결 중</span><span id="last-update" class="muted">첫 측정 대기</span></div>
     </header>
 
     <main>
@@ -26,6 +27,28 @@
           <article class="metric-card disk"><div class="metric-label"><span><i></i>디스크</span><span class="metric-context">물리 디스크 전송량</span></div><div class="metric-value"><strong id="disk-value">—</strong><span>MiB/s</span></div><div id="disk-spark" class="sparkline" aria-hidden="true"></div><p id="disk-detail">측정 대기 중</p></article>
         </div>
         <p class="metric-footnote">CPU·GPU·메모리 %는 각각의 최대 용량 기준이며, 서로 더해 100%가 되는 비율이 아닙니다.</p>
+      </section>
+
+      <section id="governor-panel" class="panel governor-panel" aria-labelledby="governor-title" aria-busy="false">
+        <div class="panel-heading governor-heading">
+          <div><p class="eyebrow">SHARED WORKLOAD POLICY</p><h2 id="governor-title">안정 분배</h2><p id="governor-description" class="subtle">켜면 자원 측정을 시작하고 모든 연동 앱에 같은 자원 분배 정책을 적용합니다.</p></div>
+          <button id="governor-toggle" class="governor-toggle" type="button" role="switch" aria-checked="false" aria-label="모든 연동 앱의 안정 분배" aria-describedby="governor-status governor-scope" disabled><span class="governor-switch-track" aria-hidden="true"><i></i></span><span id="governor-toggle-label">설정 확인 중</span></button>
+        </div>
+        <div class="governor-status-line"><span id="governor-mode" class="mini-label">상태 확인 중</span><p id="governor-status" role="status" aria-live="polite" aria-atomic="true">공통 분배 설정을 불러오고 있습니다.</p><span id="governor-updated" class="muted">2초마다 확인</span></div>
+        <dl class="governor-thresholds" aria-label="고정 공통 분배 기준">
+          <div><dt>GPU → CPU 전환</dt><dd id="governor-gpu-enter">60% 이상</dd></div>
+          <div><dt>GPU 복귀</dt><dd id="governor-gpu-exit">40% 이하 · 5초 안정</dd></div>
+          <div><dt>CPU 시작 기준</dt><dd id="governor-cpu-limit">70% 미만</dd></div>
+          <div><dt>RAM 시작 기준</dt><dd id="governor-ram-limit">80% 미만</dd></div>
+          <div><dt>메모리 최소 여유</dt><dd id="governor-ram-free">6 GiB 이상</dd></div>
+        </dl>
+        <div class="governor-activity">
+          <dl class="governor-counters"><div><dt>CPU 선택</dt><dd><strong id="governor-cpu-selected">—</strong><span>실제 분배 횟수</span></dd></div><div><dt>CPU 완료</dt><dd><strong id="governor-cpu-completed">—</strong><span id="governor-total-completed">전체 완료 —</span></dd></div></dl>
+          <dl class="governor-current"><div><dt>현재 연동 작업</dt><dd id="governor-active">상태 확인 중</dd></div><div><dt>분배·대기 이유</dt><dd id="governor-reason">서버의 실제 상태 응답을 기다리고 있습니다.</dd></div></dl>
+        </div>
+        <div class="governor-adapters"><h3>연동 작업의 CPU 지원</h3><ul id="governor-adapters"><li class="subtle">지원 정보를 확인하고 있습니다.</li></ul></div>
+        <div class="governor-notes"><p id="governor-scope">CPU 지원이 확인된 연동 작업에만 다음 작업·문장 경계부터 적용합니다. 실행 중인 계산과 연동하지 않은 외부 앱의 실행 장치는 강제로 바꾸지 않습니다.</p><p>GPU 60%는 다음 작업의 분배 판단 기준입니다. 사용률을 60%로 제한하는 기능이 아니므로 GPU가 순간 100%에 도달할 수 있습니다.</p><p>선택·완료 횟수는 서버에 기록된 실제 결과만 표시합니다. CPU 지원 표시는 실행 경로의 지원 여부이며, 완료 횟수와 별도로 확인합니다.</p></div>
+        <p id="governor-error" class="governor-error" role="alert" hidden></p>
       </section>
 
       <section class="analysis-grid">
@@ -53,7 +76,7 @@
       </section>
       <div id="errors-banner" class="errors-banner" hidden></div>
     </main>
-    <footer><span>자원 분석기 <span class="footer-divider">/</span> 이 PC에서 수집·저장</span><span>프로세스 종료·성능 설정 변경 기능 없음</span></footer>
+    <footer><span>자원 분석기 <span class="footer-divider">/</span> 이 PC에서 수집·저장</span><span>연동 작업은 경계에서 제어 · 외부 프로세스 강제 변경 없음</span></footer>
   </div>
   <dialog id="process-dialog"><div class="dialog-top"><div><p class="eyebrow">PROCESS DETAILS</p><h2 id="dialog-title">프로세스 상세</h2><p id="dialog-subtitle" class="subtle"></p></div><button id="dialog-close" type="button" aria-label="프로세스 상세 닫기">×</button></div><div class="dialog-stats" id="dialog-stats"></div><div class="table-scroll"><table class="process-table"><thead><tr><th>프로세스 / PID</th><th>CPU</th><th>메모리</th><th>GPU</th><th>I/O</th></tr></thead><tbody id="process-tbody"></tbody></table></div><p class="dialog-note">실행 파일명과 필요한 스크립트 이름만 표시합니다. 전체 명령행이나 인증정보는 표시하지 않습니다.</p></dialog>
 </body>

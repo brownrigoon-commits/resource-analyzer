@@ -18,6 +18,8 @@ from urllib.parse import parse_qs, urlparse
 from collector import Collector, SAMPLE_INTERVAL_S
 from history import History, mean, gpu_value
 from app_paths import APP_ID, VERSION, bundle_dir, state_dir
+from governor import Governor
+from resource_ipc import LocalIPC
 
 ROOT = bundle_dir()
 STATIC = ROOT / 'static'
@@ -112,6 +114,7 @@ class Monitor:
         self.collecting = False
         self.recording_stop = threading.Event()
         self.csrf_token = secrets.token_urlsafe(32)
+        self.governor = Governor(data)
 
     def start(self):
         with self.lock:
@@ -126,6 +129,7 @@ class Monitor:
             self.thread.start()
 
     def pause(self):
+        self.governor.invalidate('자원 측정이 중지되었습니다')
         self.recording_stop.set()
         thread = self.thread
         if thread:
@@ -136,6 +140,7 @@ class Monitor:
     def close(self):
         self.stop.set()
         self.pause()
+        self.governor.close()
 
     def health(self):
         with self.lock:
@@ -171,19 +176,23 @@ class Monitor:
                         last_record = time.monotonic()
                     sample['recording'] = {**self.history.stats(), 'retention_days': 7,
                                            'write_interval_s': 15, 'session_started_at': self.started_at}
+                    self.governor.update(sample, observed_at=begin)
                     with self.lock:
                         sample['published_at'] = time.time()
                         self.latest = sample
                         self.error = None
                 except Exception as error:
+                    self.governor.invalidate('자원 수집 오류로 새 작업을 기다립니다')
                     with self.lock:
                         self.error = type(error).__name__ + ': ' + str(error)[:160]
                 finally:
                     deadline = next_sample_deadline(deadline, time.monotonic())
         except Exception as error:
+            self.governor.invalidate('자원 수집을 시작하지 못했습니다')
             with self.lock:
                 self.error = type(error).__name__ + ': ' + str(error)[:160]
         finally:
+            self.governor.invalidate('자원 수집이 종료되었습니다')
             if pending:
                 self.history.record(pending)
             if collector:
@@ -240,6 +249,8 @@ def make_handler(monitor, port):
                 return
             if parsed.path == '/api/health':
                 self.send(json.dumps(monitor.health(), ensure_ascii=False).encode(), 'application/json; charset=utf-8')
+            elif parsed.path == '/api/governor':
+                self.send(json.dumps(monitor.governor.status(), ensure_ascii=False, allow_nan=False).encode(), 'application/json; charset=utf-8')
             elif parsed.path == '/api/snapshot':
                 value, status = monitor.snapshot()
                 self.send(json.dumps(value, ensure_ascii=False, allow_nan=False).encode(), 'application/json; charset=utf-8', status)
@@ -260,6 +271,7 @@ def make_handler(monitor, port):
             else:
                 name = {'/': 'welcome.html', '/index.html': 'welcome.html',
                         '/dashboard': 'index.html', '/app.js': 'app.js', '/style.css': 'style.css',
+                        '/governor.js': 'governor.js',
                         '/welcome.js': 'welcome.js', '/welcome.css': 'welcome.css'}.get(parsed.path)
                 if not name or not (STATIC / name).is_file():
                     self.send(b'Not found', 'text/plain', 404)
@@ -281,12 +293,38 @@ def make_handler(monitor, port):
                 length = int(self.headers.get('Content-Length', '0'))
                 if length < 0 or length > 1024:
                     raise ValueError()
-                if length:
-                    json.loads(self.rfile.read(length))
+                payload = json.loads(self.rfile.read(length)) if length else {}
+                if not isinstance(payload, dict):
+                    raise ValueError()
             except (ValueError, json.JSONDecodeError):
                 self.send(b'Invalid request', 'text/plain', 400)
                 return
             path = urlparse(self.path).path
+            if path.startswith('/api/governor/'):
+                try:
+                    if path == '/api/governor/configure':
+                        if set(payload) != {'enabled'} or not isinstance(payload['enabled'], bool):
+                            raise ValueError('enabled must be boolean')
+                        value = monitor.governor.configure(payload['enabled'])
+                        if payload['enabled']:
+                            monitor.start()
+                    elif path == '/api/governor/acquire':
+                        value = monitor.governor.acquire(payload)
+                    elif path == '/api/governor/checkpoint':
+                        value = monitor.governor.checkpoint(payload)
+                    elif path == '/api/governor/release':
+                        value = monitor.governor.release(payload)
+                    else:
+                        self.send(b'Not found', 'text/plain', 404)
+                        return
+                except PermissionError:
+                    self.send(b'Invalid worker ownership', 'text/plain', 403)
+                    return
+                except (ValueError, TypeError, KeyError):
+                    self.send(b'Invalid governor request', 'text/plain', 400)
+                    return
+                self.send(json.dumps(value, ensure_ascii=False, allow_nan=False).encode(), 'application/json; charset=utf-8')
+                return
             if path == '/api/monitor/start':
                 monitor.start()
             elif path == '/api/monitor/stop':
@@ -314,9 +352,16 @@ def main():
         return
     monitor = Monitor(data)
     server = ThreadingHTTPServer(('127.0.0.1', args.port), make_handler(monitor, args.port))
+    ipc = LocalIPC(monitor.governor, data, monitor.csrf_token, VERSION)
+    try:
+        ipc.start()
+    except Exception:
+        server.server_close()
+        monitor.close()
+        raise
     (data / 'STOP').unlink(missing_ok=True)
     (data / 'monitor.pid').write_text(str(os.getpid()), encoding='ascii')
-    if args.autostart:
+    if args.autostart or monitor.governor.status()['enabled']:
         monitor.start()
     def shutdown_when_requested():
         while not monitor.stop.wait(.3):
@@ -332,6 +377,7 @@ def main():
     except KeyboardInterrupt:
         pass
     finally:
+        ipc.close()
         monitor.close()
         server.server_close()
         (data / 'monitor.pid').unlink(missing_ok=True)
