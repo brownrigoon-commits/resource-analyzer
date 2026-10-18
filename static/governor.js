@@ -9,6 +9,7 @@
     disabled: "꺼짐",
     ready: "연동 작업 대기",
     "gpu-pressure": "GPU 부하 대응",
+    "cpu-preference": "CPU 분배 유지",
     waiting: "안전 여유 대기",
     active: "연동 작업 실행 중",
     orphaned: "실행 상태 확인 필요",

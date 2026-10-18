@@ -21,6 +21,7 @@ import psutil
 
 THRESHOLDS = {
     'gpu_enter_pct': 60, 'gpu_exit_pct': 40, 'gpu_recovery_s': 5,
+    'gpu_cpu_preference_s': 60,
     'cpu_max_pct': 70, 'ram_max_pct': 80, 'min_ram_available_gb': 6,
     'sample_max_age_s': 5, 'sample_max_duration_s': 3,
 }
@@ -113,6 +114,11 @@ class Governor:
         self._healthy_since = None
         self._pressure = False
         self._gpu_low_since = None
+        # Keep CPU-capable follow-up stages on CPU across model teardown and
+        # worker startup gaps. These monotonic observations are intentionally
+        # not persisted as wall-clock history in the lease journal.
+        self._last_gpu_high_at = None
+        self._last_cpu_completion_at = None
         self._last_touch = None
         self._recovered_lease = False
         self._owner_lock = None
@@ -258,6 +264,7 @@ class Governor:
                 if self._healthy_since is None:
                     self._healthy_since = observed_at
                 if self._sample['gpu_pct'] >= THRESHOLDS['gpu_enter_pct']:
+                    self._last_gpu_high_at = float(observed_at)
                     self._pressure, self._gpu_low_since = True, None
                 elif self._pressure:
                     if self._sample['gpu_pct'] <= THRESHOLDS['gpu_exit_pct']:
@@ -333,6 +340,16 @@ class Governor:
             return self._wait('GPU 사용률이 높아 현재 구간을 마친 뒤 다음 구간을 기다립니다.')
         return self._grant(lease)
 
+    def _cpu_preference(self):
+        now = time.monotonic()
+        observations = [stamp for stamp in (self._last_gpu_high_at, self._last_cpu_completion_at)
+                        if stamp is not None and stamp <= now]
+        if not observations:
+            return False, 0.0
+        age = now - max(observations)
+        duration = THRESHOLDS['gpu_cpu_preference_s']
+        return age <= duration, max(0.0, duration - age)
+
     def acquire(self, payload):
         identity = _identity(payload)
         with self._lock:
@@ -355,6 +372,9 @@ class Governor:
             if self._enabled and self._pressure:
                 if 'cpu' not in adapter['devices']:
                     return self._wait('GPU 사용률이 60% 이상이며 이 단계는 CPU 분배를 지원하지 않습니다.')
+                device = 'cpu'
+            elif (self._enabled and adapter['default_device'] == 'cuda'
+                  and 'cpu' in adapter['devices'] and self._cpu_preference()[0]):
                 device = 'cpu'
             now = time.time()
             lease = {**identity, 'lease_id': secrets.token_urlsafe(32), 'device': device,
@@ -395,6 +415,8 @@ class Governor:
             if not self._active or not _same_lease(self._active, identity):
                 raise PermissionError('작업 임대 토큰 또는 소유자가 일치하지 않습니다.')
             stats = dict(self._stats)
+            extend_cpu_preference = (completed and self._active['device'] == 'cpu'
+                                     and _ADAPTERS[self._active['stage']]['default_device'] == 'cuda')
             if completed:
                 stats['completed'] += 1
                 if self._active['device'] == 'cpu':
@@ -403,11 +425,14 @@ class Governor:
                 return {**self._wait(self._journal_error), 'released': False}
             self._active, self._last_touch, self._recovered_lease = None, None, False
             self._last_release, self._stats = identity, stats
+            if extend_cpu_preference:
+                self._last_cpu_completion_at = time.monotonic()
             return {**self._wait('작업 임대를 반환했습니다.', count=False), 'released': True}
 
     def _status(self):
         self._reconcile()
         reason = self._guard()
+        cpu_preferred, cpu_preference_remaining = self._cpu_preference()
         active = None
         orphaned = self._orphaned()
         if self._active:
@@ -429,10 +454,13 @@ class Governor:
             mode, reason = 'disabled', '자동 CPU 분배가 꺼져 있습니다. 기본 장치와 안전 보호를 사용합니다.'
         elif self._pressure:
             mode, reason = 'gpu-pressure', 'GPU 사용률이 높아 지원되는 다음 작업을 CPU로 분배합니다.'
+        elif cpu_preferred:
+            mode, reason = 'cpu-preference', '최근 GPU 부하 또는 CPU 작업 완료 기록에 따라 다음 지원 작업을 CPU로 분배합니다.'
         else:
             mode, reason = 'ready', '다음 연동 작업을 기다리고 있습니다.'
         return {'enabled': self._enabled, 'mode': mode, 'thresholds': dict(THRESHOLDS),
                 'active': active, 'reason': reason, 'adapters': copy.deepcopy(list(ADAPTERS)),
+                'cpu_preference_remaining_s': round(cpu_preference_remaining, 2),
                 'stats': dict(self._stats)}
 
     def status(self):

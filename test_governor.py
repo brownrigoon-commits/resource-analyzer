@@ -47,6 +47,12 @@ class GovernorTests(unittest.TestCase):
     def update(self, **changes):
         self.gov.update(sample(**changes), observed_at=self.now)
 
+    def advance(self, seconds, gpu=20):
+        target = self.now + seconds
+        while self.now < target:
+            self.now = min(target, self.now + 1)
+            self.update(gpu=gpu)
+
     def release(self, grant, ident='job-1', completed=False, stage='whisper-asr'):
         return self.gov.release({**request(ident, stage=stage, lease=grant['lease_id']), 'completed': completed})
 
@@ -81,7 +87,115 @@ class GovernorTests(unittest.TestCase):
         self.assertEqual(self.gov.status()['mode'], 'gpu-pressure')
         self.now += 1
         self.update(gpu=40)
-        self.assertEqual(self.gov.acquire(request('job-3'))['decision'], 'cuda')
+        self.assertEqual(self.gov.status()['mode'], 'cpu-preference')
+        grant = self.gov.acquire(request('job-3'))
+        self.assertEqual(grant['decision'], 'cpu')
+        self.release(grant, 'job-3')
+        self.assertEqual(self.gov.acquire(request('job-4', stage='cosyvoice-synthesis'))['decision'], 'cuda')
+
+    def test_cpu_preference_expires_after_sixty_seconds_without_delaying_gpu_only_work(self):
+        self.gov.configure(True)
+        self.update(gpu=60)
+        self.advance(6)
+        self.assertEqual(self.gov.status()['cpu_preference_remaining_s'], 54)
+        synthesis = self.gov.acquire(request('synthesis', stage='cosyvoice-synthesis'))
+        self.assertEqual(synthesis['decision'], 'cuda')
+        self.release(synthesis, 'synthesis', stage='cosyvoice-synthesis', completed=True)
+        self.advance(54)
+        grant = self.gov.acquire(request('at-sixty'))
+        self.assertEqual(grant['decision'], 'cpu')
+        self.release(grant, 'at-sixty')
+        self.advance(.001)
+        self.assertEqual(self.gov.status()['mode'], 'ready')
+        self.assertEqual(self.gov.acquire(request('after-sixty'))['decision'], 'cuda')
+
+    def test_a_new_real_gpu_high_observation_refreshes_cpu_preference(self):
+        self.gov.configure(True)
+        self.update(gpu=60)
+        self.advance(40)
+        self.update(gpu=60)
+        self.advance(30)
+        self.assertEqual(self.gov.status()['cpu_preference_remaining_s'], 30)
+        self.assertEqual(self.gov.acquire(request())['decision'], 'cpu')
+
+    def test_successful_cpu_asr_completion_extends_preference_for_follow_up_qa(self):
+        self.gov.configure(True)
+        self.update(gpu=60)
+        self.advance(50)
+        first = self.gov.acquire(request('first-qa'))
+        self.assertEqual(first['decision'], 'cpu')
+        self.advance(20)
+        self.assertEqual(self.gov.checkpoint(request('first-qa', lease=first['lease_id']))['decision'], 'cpu')
+        self.release(first, 'first-qa', completed=True)
+        self.assertEqual(self.gov.status()['cpu_preference_remaining_s'], 60)
+        self.advance(59)
+        second = self.gov.acquire(request('qa-medium'))
+        self.assertEqual(second['decision'], 'cpu')
+        self.release(second, 'qa-medium', completed=False)
+        self.advance(1.001)
+        self.assertEqual(self.gov.acquire(request('later-qa'))['decision'], 'cuda')
+
+    def test_cpu_only_preprocess_does_not_start_or_extend_cpu_preference(self):
+        self.gov.configure(True)
+        prepare = self.gov.acquire(request('prepare-only', stage='audio-preprocess'))
+        self.release(prepare, 'prepare-only', stage='audio-preprocess', completed=True)
+        self.assertEqual(self.gov.status()['cpu_preference_remaining_s'], 0)
+        self.assertEqual(self.gov.status()['mode'], 'ready')
+        self.update(gpu=60)
+        self.advance(50)
+        prepare = self.gov.acquire(request('prepare-after-high', stage='audio-preprocess'))
+        self.release(prepare, 'prepare-after-high', stage='audio-preprocess', completed=True)
+        self.assertEqual(self.gov.status()['cpu_preference_remaining_s'], 10)
+        self.advance(10.001)
+        self.assertEqual(self.gov.acquire(request('asr-after-prepare'))['decision'], 'cuda')
+
+    def test_repeated_completion_response_does_not_extend_preference_again(self):
+        self.gov.configure(True)
+        self.update(gpu=60)
+        grant = self.gov.acquire(request())
+        self.advance(6)
+        self.release(grant, completed=True)
+        self.advance(61)
+        self.release(grant, completed=True)
+        self.assertEqual(self.gov.status()['cpu_preference_remaining_s'], 0)
+        self.assertEqual(self.gov.acquire(request('next-job'))['decision'], 'cuda')
+
+    def test_cpu_preference_respects_guards_and_policy_disabled(self):
+        self.gov.configure(True)
+        self.update(gpu=60)
+        self.advance(6)
+        for changes in ({'cpu': 70}, {'ram': 80}, {'free': 5.999}):
+            with self.subTest(changes=changes):
+                self.update(**changes)
+                self.assertEqual(self.gov.acquire(request())['decision'], 'wait')
+        self.gov.invalidate('측정 중단')
+        self.assertEqual(self.gov.acquire(request())['decision'], 'wait')
+        self.update()
+        self.advance(5)
+        self.assertEqual(self.gov.status()['mode'], 'cpu-preference')
+        self.now += 5.001
+        self.assertEqual(self.gov.acquire(request())['decision'], 'wait')
+        self.update()
+        self.advance(5)
+        self.gov.configure(False)
+        self.assertEqual(self.gov.acquire(request())['decision'], 'cuda')
+
+    def test_restarted_cpu_asr_lease_extends_preference_without_changing_journal_schema(self):
+        self.gov.configure(True)
+        self.update(gpu=60)
+        grant = self.gov.acquire(request())
+        self.gov.close()
+        restored = Governor(self.folder.name)
+        self.addCleanup(restored.close)
+        restored.update(sample(), observed_at=self.now)
+        self.assertEqual(restored.status()['cpu_preference_remaining_s'], 0)
+        self.assertEqual(restored.checkpoint(request(lease=grant['lease_id']))['decision'], 'cpu')
+        restored.release({**request(lease=grant['lease_id']), 'completed': True})
+        self.assertEqual(restored.status()['cpu_preference_remaining_s'], 60)
+        self.assertEqual(restored.acquire(request('next-qa'))['decision'], 'cpu')
+        journal = json.loads((Path(self.folder.name) / 'governor.json').read_text(encoding='utf-8'))
+        self.assertEqual(set(journal), {'version', 'enabled', 'active', 'last_release', 'stats'})
+        self.assertEqual(journal['version'], 1)
 
     def test_cpu_ram_and_minimum_free_boundaries(self):
         for changes in ({'cpu': 70}, {'ram': 80}, {'free': 5.999}):
@@ -187,6 +301,9 @@ class GovernorTests(unittest.TestCase):
         self.assertEqual(response['decision'], 'wait')
         self.assertEqual(self.gov.status()['active']['device'], 'cuda')
         self.assertIsNotNone(self.gov.status()['active'])
+        self.advance(6)
+        self.assertEqual(self.gov.checkpoint(request(lease=grant['lease_id']))['decision'], 'cuda')
+        self.assertGreater(self.gov.status()['cpu_preference_remaining_s'], 0)
 
     def test_cpu_checkpoint_keeps_device_and_cpu_guard_applies_to_cuda(self):
         self.gov.configure(True)
@@ -197,9 +314,10 @@ class GovernorTests(unittest.TestCase):
             self.update(gpu=20)
         self.assertEqual(self.gov.checkpoint(request(lease=grant['lease_id']))['decision'], 'cpu')
         self.release(grant)
-        grant = self.gov.acquire(request('job-2'))
+        grant = self.gov.acquire(request('job-2', stage='cosyvoice-synthesis'))
+        self.assertEqual(grant['decision'], 'cuda')
         self.update(cpu=70)
-        self.assertEqual(self.gov.checkpoint(request('job-2', lease=grant['lease_id']))['decision'], 'wait')
+        self.assertEqual(self.gov.checkpoint(request('job-2', stage='cosyvoice-synthesis', lease=grant['lease_id']))['decision'], 'wait')
 
     def test_wrong_owner_and_token_cannot_release_or_checkpoint(self):
         grant = self.gov.acquire(request())

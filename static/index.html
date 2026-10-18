@@ -47,7 +47,7 @@
           <dl class="governor-current"><div><dt>현재 연동 작업</dt><dd id="governor-active">상태 확인 중</dd></div><div><dt>분배·대기 이유</dt><dd id="governor-reason">서버의 실제 상태 응답을 기다리고 있습니다.</dd></div></dl>
         </div>
         <div class="governor-adapters"><h3>연동 작업의 CPU 지원</h3><ul id="governor-adapters"><li class="subtle">지원 정보를 확인하고 있습니다.</li></ul></div>
-        <div class="governor-notes"><p id="governor-scope">CPU 지원이 확인된 연동 작업에만 다음 작업·문장 경계부터 적용합니다. 실행 중인 계산과 연동하지 않은 외부 앱의 실행 장치는 강제로 바꾸지 않습니다.</p><p>GPU 60%는 다음 작업의 분배 판단 기준입니다. 사용률을 60%로 제한하는 기능이 아니므로 GPU가 순간 100%에 도달할 수 있습니다.</p><p>선택·완료 횟수는 서버에 기록된 실제 결과만 표시합니다. CPU 지원 표시는 실행 경로의 지원 여부이며, 완료 횟수와 별도로 확인합니다.</p></div>
+        <div class="governor-notes"><p id="governor-scope">CPU 지원이 확인된 연동 작업에만 다음 작업·문장 경계부터 적용합니다. 실행 중인 계산과 연동하지 않은 외부 앱의 실행 장치는 강제로 바꾸지 않습니다.</p><p>GPU 60%는 다음 작업의 분배 판단 기준입니다. 사용률을 60%로 제한하는 기능이 아니므로 GPU가 순간 100%에 도달할 수 있습니다.</p><p>최근 60초 동안 GPU 부하가 높았다면 다음 CPU 지원 검사도 CPU로 선택합니다. CPU 검사가 정상 완료되면 이 선호 기간을 연장합니다. GPU 전용 작업의 재개 기준은 40% 이하 5초로 유지합니다.</p><p>선택·완료 횟수는 서버에 기록된 실제 결과만 표시합니다. CPU 지원 표시는 실행 경로의 지원 여부이며, 완료 횟수와 별도로 확인합니다.</p></div>
         <p id="governor-error" class="governor-error" role="alert" hidden></p>
       </section>
 
