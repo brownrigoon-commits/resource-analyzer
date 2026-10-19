@@ -11,6 +11,7 @@ import psutil
 from gpu_metrics import GpuSampler
 from process_metrics import ProcessSampler
 from temperature_metrics import TemperatureSampler
+from system_metrics import SystemInfoSampler, DiskActivitySampler
 
 SAMPLE_INTERVAL_S = 1.0
 
@@ -69,6 +70,8 @@ class Collector:
         self.gpu = GpuSampler()
         self.process_sampler = ProcessSampler()
         self.temperatures = TemperatureSampler()
+        self.system_info = SystemInfoSampler()
+        self.disk_activity = DiskActivitySampler()
         self.previous = {}
         self.metadata = {}
         self.last_tick = time.monotonic()
@@ -76,6 +79,7 @@ class Collector:
         self.last_partitions = 0
         self.disks = []
         self.cpu_threads = psutil.cpu_count() or 1
+        self.cpu_cores = psutil.cpu_count(logical=False)
         self.cpu_name = 'CPU'
         try:
             with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r'HARDWARE\DESCRIPTION\System\CentralProcessor\0') as key:
@@ -170,13 +174,15 @@ class Collector:
         self.last_tick, self.last_disk = now, disk
         return {'ts': ts, 'interval_s': SAMPLE_INTERVAL_S, 'system': {
             'cpu_pct': round(statistics.mean(cpu_cores), 2), 'cpu_threads': self.cpu_threads,
-            'cpu_name': self.cpu_name, 'cpu_peak_core_pct': max(cpu_cores),
+            'cpu_name': self.cpu_name, 'cpu_cores': self.cpu_cores, 'cpu_peak_core_pct': max(cpu_cores),
             'ram_used_gb': round((memory.total - memory.available) / 1024**3, 3),
             'ram_total_gb': round(memory.total / 1024**3, 3), 'ram_pct': memory.percent,
             'ram_available_gb': round(memory.available / 1024**3, 3), 'swap_pct': psutil.swap_memory().percent,
             'disk_read_mbps': round(read, 3), 'disk_write_mbps': round(write, 3),
             'disks': self.disks, 'gpus': gpu_data.get('gpus', []),
             'temperatures': self.temperatures.sample(),
+            'disk_busy_pct': self.disk_activity.sample(),
+            **self.system_info.sample(),
         }, 'groups': sorted(groups.values(), key=lambda g: (g['gpu_pct'] or 0, g['cpu_pct'], g['ram_gb']), reverse=True),
             'errors': (gpu_data.get('errors', []) + process_data.get('errors', []))[:4],
             'coverage': {'readable_processes': len(processes), 'unreadable_processes': denied,
@@ -212,6 +218,8 @@ class Collector:
         return rows
 
     def close(self):
+        self.system_info.close()
+        self.disk_activity.close()
         self.temperatures.close()
         self.process_sampler.close()
         self.gpu.close()

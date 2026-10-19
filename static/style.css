@@ -15,6 +15,34 @@
 .metric-card p{margin-top:8px}
 .metric-card .sparkline{bottom:55px;opacity:.4}
 @media(max-width:850px){.metric-temperature{font-size:10px}.metric-temperature.unavailable{font-size:9px}.metric-value{gap:4px;padding-right:5px}.metric-value>span{font-size:10px}}
+/* Independent load and thermal states; unknown/stale data stays neutral. */
+[data-level="safe"]{color:#79e2b0!important}
+[data-level="watch"]{color:#f0cf70!important}
+[data-level="high"]{color:#ff929c!important}
+[data-level="unknown"]{color:var(--muted)!important}
+.metric-temperature[data-level="safe"]{border-color:#385c4e;background:#192d28}
+.metric-temperature[data-level="watch"]{border-color:#73603a;background:#322b1d}
+.metric-temperature[data-level="high"]{border-color:#7a424c;background:#351f28}
+.metric-hardware{margin-top:12px;min-height:51px;position:relative;z-index:1}
+.metric-model{font-size:12px;line-height:1.45;font-weight:550;color:#d2deed;overflow-wrap:anywhere}
+.metric-hardware .metric-model{min-height:35px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.metric-spec{font-size:10px;line-height:1.5;color:var(--muted);margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.metric-card .metric-context{display:none}
+.metric-card .metric-value{margin-top:10px}
+.metric-card .sparkline{top:111px}
+.metric-guide{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px 16px;margin-top:12px;color:var(--muted);font-size:10px}
+.status-legend{display:inline-flex;gap:13px}
+.network-card{--accent:#7ebde8;display:grid;grid-template-columns:minmax(150px,1.3fr) repeat(2,minmax(110px,1fr));gap:12px 22px;margin-top:12px;min-height:0}
+.network-heading{grid-column:1/-1;display:flex;justify-content:space-between;align-items:center;gap:12px}
+.network-kind{font-size:11px;border:1px solid #3a4d61;border-radius:5px;padding:2px 8px;background:#17232e}
+.network-identity{align-self:center;min-width:0}
+.network-direction{font-size:10px;color:var(--muted)}
+.network-rate>div{display:flex;gap:6px;align-items:baseline;margin-top:4px}
+.network-rate strong{font-size:27px;font-weight:600;font-variant-numeric:tabular-nums;letter-spacing:-.5px}
+.network-rate>div>span{font-size:10px;color:var(--muted)}
+.network-card p.network-note{grid-column:1/-1;margin:0;font-size:10px;color:var(--muted);white-space:normal;line-height:1.5}
+@media(max-width:850px){.metric-model{font-size:11px}.metric-spec{font-size:9px}.metric-hardware{min-height:51px}.network-card{gap:10px 15px}.network-rate strong{font-size:25px}}
+@media(max-width:480px){.network-card{grid-template-columns:repeat(2,minmax(0,1fr))}.network-identity{grid-column:1/-1}.network-rate strong{font-size:27px}.metric-guide{font-size:9px}.metric-hardware{min-height:48px}}
 .governor-panel{margin-bottom:21px}
 .governor-heading{align-items:flex-start}
 .governor-toggle{display:inline-flex;align-items:center;justify-content:center;gap:9px;flex-shrink:0;min-width:138px;min-height:42px;padding:8px 12px;border:1px solid #415168;border-radius:7px;background:#202b3b;color:#ccd8e8;font-size:12px;font-weight:600}
