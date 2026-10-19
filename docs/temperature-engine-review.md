@@ -58,6 +58,7 @@ or proof of sensor availability. The upstream versioned source and separate real
 - The five temperature data/freshness/nonblocking unit tests pass. The broader suite excluding the pre-existing
   concurrent file-IPC timing failure passes (81 tests, one platform privilege skip). The excluded test also fails
   on the unchanged baseline under the same environment.
-- CPU/DIMM hardware validation remains pending completion of the official PawnIO installer's interactive dialog.
-  After installation, restart the monitor to reinitialize the sensor bridge. DIMM readings additionally require
-  physically supported, accessible module sensors.
+- Completed the official PawnIO installer and confirmed the driver service is running. After restarting the
+  packaged monitor, verified live CPU and four DIMM temperature sensors alongside GPU and storage readings.
+  All four dashboard badges display measured temperatures. DIMM readings on other machines additionally require
+  physically supported, accessible module sensors. No local hardware inventory or raw sensor logs are committed.
