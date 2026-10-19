@@ -47,6 +47,18 @@ class OnboardingTests(unittest.TestCase):
             collector.assert_not_called()
             self.assertIsNone(self.monitor.thread)
 
+    def test_speedtest_assets_are_local_and_connections_are_endpoint_scoped(self):
+        for path in ('/speedtest.mjs', '/vendor/cloudflare-speedtest-1.14.2.mjs'):
+            with self.request(path) as response:
+                self.assertIn('javascript', response.headers['Content-Type'])
+                self.assertGreater(len(response.read()), 100)
+                policy = response.headers['Content-Security-Policy']
+                self.assertIn('https://speed.cloudflare.com/__down', policy)
+                self.assertIn('https://speed.cloudflare.com/__up', policy)
+                self.assertNotIn('__results', policy)
+                self.assertIn("script-src 'self'", policy)
+        self.assertFalse(self.monitor.collecting)
+
     def test_start_is_authorized_and_idempotent(self):
         with patch.object(Monitor, 'run', lambda monitor: monitor.recording_stop.wait()):
             token = self.monitor.csrf_token

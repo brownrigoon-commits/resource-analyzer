@@ -9,6 +9,7 @@
   <link rel="stylesheet" href="/style.css">
   <script src="/app.js" defer></script>
   <script src="/governor.js" defer></script>
+  <script type="module" src="/speedtest.mjs"></script>
 </head>
 <body>
   <div class="app-shell">
@@ -32,6 +33,16 @@
           <div class="network-rate"><span class="network-direction">↓ 다운로드</span><div><strong id="network-download" data-level="unknown">—</strong><span>Mbps</span></div></div>
           <div class="network-rate"><span class="network-direction">↑ 업로드</span><div><strong id="network-upload" data-level="unknown">—</strong><span>Mbps</span></div></div>
           <p id="network-note" class="network-note">실시간 송수신 속도를 확인합니다.</p>
+          <div class="internet-speedtest">
+            <div class="speedtest-heading"><div><h3>인터넷 속도 테스트</h3><p>현재 사용량과 별도로 다운로드·업로드 성능을 측정합니다.</p></div><div class="speedtest-actions"><button id="speedtest-start" type="button" aria-controls="speedtest-panel">속도 테스트</button><button id="speedtest-cancel" type="button" hidden>중지</button></div></div>
+            <p class="speedtest-disclosure">Cloudflare 서버와 테스트 데이터를 주고받습니다. 다른 전송을 잠시 멈추면 더 정확합니다.</p>
+            <div id="speedtest-panel" class="speedtest-panel" aria-busy="false" hidden>
+              <p id="speedtest-status" class="speedtest-status" role="status" aria-live="polite" aria-atomic="true">측정 대기</p>
+              <progress id="speedtest-progress" aria-label="인터넷 속도 측정 진행 중" hidden></progress>
+              <dl class="speedtest-results"><div><dt>↓ 다운로드</dt><dd><strong id="speedtest-download">—</strong><span>Mbps</span></dd></div><div><dt>↑ 업로드</dt><dd><strong id="speedtest-upload">—</strong><span>Mbps</span></dd></div><div><dt>응답 지연</dt><dd><strong id="speedtest-latency">—</strong><span>ms</span></dd></div></dl>
+              <p id="speedtest-time" class="speedtest-time"></p>
+            </div>
+          </div>
         </article>
         <div class="metric-guide"><span class="status-legend"><span data-level="safe">● 여유</span><span data-level="watch">● 주의</span><span data-level="high">● 높음</span></span><span>사용량·온도 별도 기준 · 색상은 참고 지표</span></div>
         <p class="metric-footnote">CPU·GPU·메모리 %는 각 장치 기준입니다. 높은 사용률이 과열을 뜻하지는 않습니다.</p>

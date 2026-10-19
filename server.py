@@ -230,7 +230,7 @@ def make_handler(monitor, port):
             self.send_header('Content-Length', str(len(data)))
             self.send_header('Cache-Control', 'no-store')
             self.send_header('X-Content-Type-Options', 'nosniff')
-            self.send_header('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self'; style-src-attr 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'")
+            self.send_header('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self'; style-src-attr 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://speed.cloudflare.com/__down https://speed.cloudflare.com/__up; frame-ancestors 'none'")
             if disposition:
                 self.send_header('Content-Disposition', disposition)
             self.end_headers()
@@ -272,6 +272,8 @@ def make_handler(monitor, port):
                 name = {'/': 'welcome.html', '/index.html': 'welcome.html',
                         '/dashboard': 'index.html', '/app.js': 'app.js', '/style.css': 'style.css',
                         '/governor.js': 'governor.js',
+                        '/speedtest.mjs': 'speedtest.mjs',
+                        '/vendor/cloudflare-speedtest-1.14.2.mjs': 'vendor/cloudflare-speedtest-1.14.2.mjs',
                         '/welcome.js': 'welcome.js', '/welcome.css': 'welcome.css'}.get(parsed.path)
                 if not name or not (STATIC / name).is_file():
                     self.send(b'Not found', 'text/plain', 404)

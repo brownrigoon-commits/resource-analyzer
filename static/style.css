@@ -43,6 +43,30 @@
 .network-card p.network-note{grid-column:1/-1;margin:0;font-size:10px;color:var(--muted);white-space:normal;line-height:1.5}
 @media(max-width:850px){.metric-model{font-size:11px}.metric-spec{font-size:9px}.metric-hardware{min-height:51px}.network-card{gap:10px 15px}.network-rate strong{font-size:25px}}
 @media(max-width:480px){.network-card{grid-template-columns:repeat(2,minmax(0,1fr))}.network-identity{grid-column:1/-1}.network-rate strong{font-size:27px}.metric-guide{font-size:9px}.metric-hardware{min-height:48px}}
+.internet-speedtest{grid-column:1/-1;border-top:1px solid var(--border);padding-top:15px;margin-top:4px}
+.speedtest-heading{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.speedtest-heading h3{font-size:12px;font-weight:600;color:#d8e5f3}
+.internet-speedtest p{white-space:normal;overflow:visible;text-overflow:clip;line-height:1.6}
+.speedtest-heading p{margin-top:3px;font-size:10px;color:var(--muted)}
+.speedtest-actions{display:flex;align-items:center;gap:7px;flex-shrink:0}
+.speedtest-actions button{min-height:36px;padding:7px 12px;border:1px solid #3d7469;background:#203b35;color:#a5efcf;border-radius:6px;font-size:11px;font-weight:550}
+.speedtest-actions button:hover:not(:disabled){background:#294b42;border-color:#70b89b}
+.speedtest-actions button:disabled{opacity:.55;cursor:wait}
+.speedtest-actions #speedtest-cancel{background:transparent;border-color:#526176;color:#d4deec}
+.network-card p.speedtest-disclosure{font-size:9px;color:var(--muted);margin-top:8px}
+.speedtest-panel{padding-top:10px}
+.speedtest-panel[hidden],.speedtest-actions button[hidden],#speedtest-progress[hidden]{display:none!important}
+.network-card p.speedtest-status{margin:0;font-size:10px;color:#a8c7dd}
+.speedtest-panel[data-state="error"] .speedtest-status,.speedtest-panel[data-state="cancelled"] .speedtest-status{color:#f0cf70}
+#speedtest-progress{display:block;width:100%;height:4px;margin-top:10px;accent-color:#49dac3}
+.speedtest-results{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin:12px 0 0}
+.speedtest-results dt{font-size:10px;color:var(--muted)}
+.speedtest-results dd{display:flex;align-items:baseline;gap:5px;margin:4px 0 0;font-variant-numeric:tabular-nums}
+.speedtest-results strong{font-size:23px;font-weight:600;color:#deebf8;letter-spacing:-.5px}
+.speedtest-panel[data-state="complete"] .speedtest-results strong{color:#79e2b0}
+.speedtest-results dd>span{font-size:10px;color:var(--muted)}
+.network-card p.speedtest-time{margin:9px 0 0;font-size:9px;color:var(--muted)}
+@media(max-width:560px){.speedtest-heading{align-items:flex-start;flex-wrap:wrap}.speedtest-actions button{min-height:42px}.speedtest-results strong{font-size:21px}.speedtest-results{gap:9px}}
 .governor-panel{margin-bottom:21px}
 .governor-heading{align-items:flex-start}
 .governor-toggle{display:inline-flex;align-items:center;justify-content:center;gap:9px;flex-shrink:0;min-width:138px;min-height:42px;padding:8px 12px;border:1px solid #415168;border-radius:7px;background:#202b3b;color:#ccd8e8;font-size:12px;font-weight:600}

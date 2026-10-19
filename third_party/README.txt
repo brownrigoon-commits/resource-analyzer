@@ -45,3 +45,12 @@ https://github.com/dahall/TaskScheduler
 SensorBridge source and build instructions are part of Resource Analyzer.
 Its implementation reads sensor values only. It does not invoke fan controls,
 sensor limit setters, SPD programming, or an unrestricted driver edition.
+
+Cloudflare Speedtest 1.14.2: MIT (Cloudflare-Speedtest-LICENSE.txt)
+https://github.com/cloudflare/speedtest
+https://registry.npmjs.org/@cloudflare/speedtest/-/speedtest-1.14.2.tgz
+Archive SHA256: 26ab2f876a525aed2ddb12dbdde98edb91aa68b23b119492798f202fe87e20f3
+Bundled module SHA256: 3b739efb727dc74520d621cb7a0b0ecb4dd4336fe593005d1d7b8efa1dc430dc
+Unmodified official module, served locally as static/vendor/cloudflare-speedtest-1.14.2.mjs.
+Only button-initiated latency/download/upload measurements are configured.
+Optional measurement/final-result logging is disabled. No packet-loss/TURN or reachability probes are enabled.
