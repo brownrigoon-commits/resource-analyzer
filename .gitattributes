@@ -1,0 +1,2 @@
+# Preserve the integrity-checked upstream module byte-for-byte on Windows.
+static/vendor/cloudflare-speedtest-*.mjs -text
