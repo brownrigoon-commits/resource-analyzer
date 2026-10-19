@@ -54,6 +54,7 @@ htmlcov/
 # Release binaries are published as release assets
 /build/
 /dist/
+/vendor/sensors/
 *.exe
 *.msi
 *.pdb

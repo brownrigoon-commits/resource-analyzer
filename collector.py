@@ -10,6 +10,7 @@ import winreg
 import psutil
 from gpu_metrics import GpuSampler
 from process_metrics import ProcessSampler
+from temperature_metrics import TemperatureSampler
 
 SAMPLE_INTERVAL_S = 1.0
 
@@ -67,6 +68,7 @@ class Collector:
     def __init__(self):
         self.gpu = GpuSampler()
         self.process_sampler = ProcessSampler()
+        self.temperatures = TemperatureSampler()
         self.previous = {}
         self.metadata = {}
         self.last_tick = time.monotonic()
@@ -174,6 +176,7 @@ class Collector:
             'ram_available_gb': round(memory.available / 1024**3, 3), 'swap_pct': psutil.swap_memory().percent,
             'disk_read_mbps': round(read, 3), 'disk_write_mbps': round(write, 3),
             'disks': self.disks, 'gpus': gpu_data.get('gpus', []),
+            'temperatures': self.temperatures.sample(),
         }, 'groups': sorted(groups.values(), key=lambda g: (g['gpu_pct'] or 0, g['cpu_pct'], g['ram_gb']), reverse=True),
             'errors': (gpu_data.get('errors', []) + process_data.get('errors', []))[:4],
             'coverage': {'readable_processes': len(processes), 'unreadable_processes': denied,
@@ -209,5 +212,6 @@ class Collector:
         return rows
 
     def close(self):
+        self.temperatures.close()
         self.process_sampler.close()
         self.gpu.close()

@@ -134,7 +134,16 @@ def main():
     parser.add_argument('--autostart', action='store_true', help='수집도 즉시 시작')
     parser.add_argument('--stop', action='store_true', help='현재 분석기 서비스 종료')
     parser.add_argument('--no-browser', action='store_true', help='브라우저를 열지 않음')
+    parser.add_argument('--install-temperature-support', action='store_true', help='공식 온도 센서 드라이버 설치')
     args = parser.parse_args()
+    if args.install_temperature_support:
+        from temperature_metrics import launch_elevated
+        from app_paths import bundle_dir
+        installer = bundle_dir() / 'vendor' / 'sensors' / 'PawnIO_setup.exe'
+        if not installer.is_file():
+            raise RuntimeError('온도 센서 설치 파일이 포함되지 않은 빌드입니다.')
+        launch_elevated(installer, ['-install'])
+        return 0
     if not 1 <= args.port <= 65535:
         parser.error('포트는 1부터 65535 사이여야 합니다.')
     directory = state_dir(args.data_dir)

@@ -10,6 +10,11 @@
 @media(max-width:560px){.poll-label{max-width:125px;white-space:normal;text-align:right;line-height:1.6}.pressure-summary{padding:11px 14px;font-size:9px}.pressure-summary>span:first-child{width:100%}.voice-panel .mini-label{white-space:normal;max-width:160px;font-size:9px;text-align:right}.section-heading>div{min-width:0}}
 .home-link{font-size:11px;color:#b5c7db;text-decoration:none;border-bottom:1px solid transparent;padding:4px 0}.home-link:hover{border-color:#66dfbd;color:#66dfbd}.details-grid:not(.has-voice){grid-template-columns:1fr}
 
+.metric-temperature{display:table;position:relative;z-index:1;max-width:100%;margin-top:8px;padding:2px 6px;border:1px solid #354456;border-radius:4px;background:#17222e;color:#d0deed;font-size:11px;line-height:1.4;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.metric-temperature.unavailable{color:var(--muted);font-size:10px;border-color:#303b4c}
+.metric-card p{margin-top:8px}
+.metric-card .sparkline{bottom:55px;opacity:.4}
+@media(max-width:850px){.metric-temperature{font-size:10px}.metric-temperature.unavailable{font-size:9px}.metric-value{gap:4px;padding-right:5px}.metric-value>span{font-size:10px}}
 .governor-panel{margin-bottom:21px}
 .governor-heading{align-items:flex-start}
 .governor-toggle{display:inline-flex;align-items:center;justify-content:center;gap:9px;flex-shrink:0;min-width:138px;min-height:42px;padding:8px 12px;border:1px solid #415168;border-radius:7px;background:#202b3b;color:#ccd8e8;font-size:12px;font-weight:600}

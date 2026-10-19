@@ -21,11 +21,25 @@
   const peakGpu = (gpus) => rows(gpus).reduce((best,g) => !best || (finite(g.util_pct)?g.util_pct:-1)>(finite(best.util_pct)?best.util_pct:-1) ? g : best,null);
   const engineName = (value) => {const match=String(value||"").match(/engtype_([a-z0-9_ -]+)/i);return match?match[1].replace(/_/g," "):value?"GPU 엔진":"";};
 
+  function renderTemperatures(sys={},gpu=null,stale=false){
+    const temperatures=sys.temperatures||{};
+    const sensors={cpu:temperatures.cpu,ram:temperatures.ram,disk:temperatures.disk,gpu:{temp_c:gpu?.temp_c,details:gpu?`${gpu.name||"GPU"} · 장치 온도`:"GPU 온도 센서를 확인할 수 없습니다."}};
+    const names={cpu:"CPU",gpu:"GPU",ram:"메모리",disk:"디스크"};
+    Object.entries(sensors).forEach(([key,sensor])=>{
+      const el=$(`${key}-temperature`),measured=!stale&&finite(sensor?.temp_c);
+      const waiting=["starting","waiting","pending"].includes(sensor?.status);
+      el.textContent=stale?"온도 갱신 지연":measured?`온도 ${number(sensor.temp_c,0)}°C`:waiting?"온도 확인 중":"온도 확인 불가";
+      el.classList.toggle("unavailable",!measured);
+      el.title=stale?"새 온도 측정값을 기다리고 있습니다. 이전 온도는 표시하지 않습니다.":sensor?.details||`${names[key]}에서 읽을 수 있는 온도 센서가 없습니다.`;
+      el.setAttribute("aria-label",`${names[key]} ${el.textContent}${measured&&sensor?.details?` · ${sensor.details}`:""}`);
+    });
+  }
+
   async function request(path){const controller=new AbortController();const timer=window.setTimeout(()=>controller.abort(),5000);try{const res=await fetch(path,{cache:"no-store",signal:controller.signal});const data=await res.json();if(!res.ok){const error=new Error(`HTTP ${res.status}`);if(res.status===503&&data?.status==="starting"){error.starting=true;error.collectorError=data.error||null;}throw error;}return data;}finally{window.clearTimeout(timer);}}
   function nextDeadlineAfter(deadline,now){const target=deadline+1000;return target>now?target:target+(Math.floor((now-target)/1000)+1)*1000;}
   async function pollSnapshot(){
     try{state.snapshot=await request("/api/snapshot");state.lastSuccess=Date.now();appendLiveSample(state.snapshot);renderSnapshot();}
-    catch(e){$("live-status").className="live-status waiting";if(e.starting){$("live-status").innerHTML=e.collectorError?"<i></i>수집 확인 필요":"<i></i>첫 측정 준비 중";$("last-update").textContent=state.lastSuccess?`마지막 수신 ${time(state.lastSuccess/1000,true)}`:"장치 정보를 확인하고 있습니다";$("errors-banner").hidden=!e.collectorError&&!state.snapshot;$("errors-banner").textContent=e.collectorError?`첫 측정 준비 중 확인이 필요합니다: ${String(e.collectorError)}`:state.snapshot?"새 측정을 준비 중입니다. 표시된 수치는 이전에 받은 마지막 값입니다.":"";}else{$("live-status").innerHTML="<i></i>연결 확인 필요";$("last-update").textContent=state.lastSuccess?`마지막 수신 ${time(state.lastSuccess/1000,true)}`:"서버에 연결할 수 없습니다";$("errors-banner").hidden=false;$("errors-banner").textContent="실시간 수집 서버 응답이 없습니다. 표시된 수치는 마지막으로 받은 값이며 새 측정값이 아닙니다. 연결을 자동으로 다시 확인합니다.";}}
+    catch(e){if(state.snapshot)renderTemperatures({},null,true);$("live-status").className="live-status waiting";if(e.starting){$("live-status").innerHTML=e.collectorError?"<i></i>수집 확인 필요":"<i></i>첫 측정 준비 중";$("last-update").textContent=state.lastSuccess?`마지막 수신 ${time(state.lastSuccess/1000,true)}`:"장치 정보를 확인하고 있습니다";$("errors-banner").hidden=!e.collectorError&&!state.snapshot;$("errors-banner").textContent=e.collectorError?`첫 측정 준비 중 확인이 필요합니다: ${String(e.collectorError)}`:state.snapshot?"새 측정을 준비 중입니다. 표시된 수치는 이전에 받은 마지막 값입니다.":"";}else{$("live-status").innerHTML="<i></i>연결 확인 필요";$("last-update").textContent=state.lastSuccess?`마지막 수신 ${time(state.lastSuccess/1000,true)}`:"서버에 연결할 수 없습니다";$("errors-banner").hidden=false;$("errors-banner").textContent="실시간 수집 서버 응답이 없습니다. 표시된 수치는 마지막으로 받은 값이며 새 측정값이 아닙니다. 연결을 자동으로 다시 확인합니다.";}}
     finally{const now=performance.now();snapshotDeadline=nextDeadlineAfter(snapshotDeadline,now);window.setTimeout(pollSnapshot,Math.max(0,snapshotDeadline-now));}
   }
   async function pollHistory(){await loadHistory();window.setTimeout(pollHistory,30000);}
@@ -39,9 +53,10 @@
     $("live-status").className=s.stale?"live-status waiting":"live-status";$("live-status").innerHTML=s.stale?"<i></i>측정 지연":"<i></i>실시간 수집 중";$("last-update").textContent=`${time(s.ts,true)} 업데이트`;
     $("hardware-summary").textContent=[sys.cpu_name||null,finite(sys.cpu_threads)?`${number(sys.cpu_threads,0)}개 논리 프로세서`:null,finite(sys.ram_total_gb)?`RAM ${number(sys.ram_total_gb)} GiB`:null,gpus.length?`NVIDIA GPU ${gpus.length}개`:null].filter(Boolean).join("  ·  ")||"장치 정보를 확인하고 있습니다.";
     $("cpu-value").textContent=number(sys.cpu_pct);$("cpu-context").textContent=finite(sys.cpu_threads)?`${sys.cpu_threads}개 논리 프로세서`:"전체 처리 용량";$("cpu-detail").textContent=finite(sys.cpu_peak_core_pct)?`가장 바쁜 논리 프로세서 ${percent(sys.cpu_peak_core_pct)}`:"PC 전체 처리 용량 기준";
-    $("gpu-value").textContent=number(gpu?.util_pct);$("gpu-context").textContent=gpu?gpu.name:"미측정";$("gpu-context").title=gpu?.name||"";$("gpu-detail").textContent=gpu?`VRAM ${number(gpu.vram_used_gb)} / ${number(gpu.vram_total_gb)} GiB${finite(gpu.temp_c)?` · ${number(gpu.temp_c,0)}°C`:""}`:"GPU 사용률을 아직 읽지 못했습니다";
+    $("gpu-value").textContent=number(gpu?.util_pct);$("gpu-context").textContent=gpu?gpu.name:"미측정";$("gpu-context").title=gpu?.name||"";$("gpu-detail").textContent=gpu?`VRAM ${number(gpu.vram_used_gb)} / ${number(gpu.vram_total_gb)} GiB`:"GPU 사용률을 아직 읽지 못했습니다";
     $("ram-value").textContent=number(sys.ram_pct);$("ram-detail").textContent=`${number(sys.ram_used_gb)} / ${number(sys.ram_total_gb)} GiB · 여유 ${number(sys.ram_available_gb)} GiB`;
     $("disk-value").textContent=number(sum(sys.disk_read_mbps,sys.disk_write_mbps),1);$("disk-detail").textContent=`읽기 ${number(sys.disk_read_mbps,1)} · 쓰기 ${number(sys.disk_write_mbps,1)} MiB/s`;
+    renderTemperatures(sys,gpu,s.stale===true);
     renderInsights();renderDevices();renderVoice();renderRecording();renderTable();renderChart();
     if(state.selectedGroup)renderDialog();
     const errors=rows(s.errors).slice();if(s.stale)errors.unshift("새 측정값이 지연되어 마지막 수신값을 표시하고 있습니다");$("errors-banner").hidden=!errors.length;
