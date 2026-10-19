@@ -155,23 +155,31 @@ internal static class SensorBridge
             if (kind != null && (kind == "disk" || lowLevelReady))
             {
                 float? maximum = null;
+                string maximumName = null;
                 foreach (ISensor sensor in hardware.Sensors)
                 {
                     if (sensor.SensorType != SensorType.Temperature || !sensor.Value.HasValue) continue;
                     string name = sensor.Name ?? "";
-                    if (Regex.IsMatch(name, @"(?:limit|critical|threshold|resolution|\bmax(?:imum)?\b|\bmin(?:imum)?\b)", RegexOptions.IgnoreCase)) continue;
+                    if (Regex.IsMatch(name, @"(?:limit|warning|critical|threshold|resolution|\bmax(?:imum)?\b|\bmin(?:imum)?\b)", RegexOptions.IgnoreCase)) continue;
+                    // StorageDevice uses 0 for the composite reading and 1-8
+                    // for live NVMe probes. Indices 10/11 are alarm setpoints.
+                    if (kind == "disk" && (sensor.Index < 0 || sensor.Index > 8)) continue;
                     if (kind == "ram" && !Regex.IsMatch(sensor.Identifier.ToString(), @"\A/memory/dimm/[0-9]+/temperature/0\z")) continue;
                     float value = sensor.Value.Value;
                     if (Single.IsNaN(value) || Single.IsInfinity(value) || value < -20 || value > 150) continue;
                     // Zero is the failure result of an unavailable AMD PawnIO
                     // read and is not a plausible running Ryzen temperature.
                     if (kind == "cpu" && value == 0) continue;
-                    if (!maximum.HasValue || value > maximum.Value) maximum = value;
+                    if (!maximum.HasValue || value > maximum.Value)
+                    {
+                        maximum = value;
+                        maximumName = name;
+                    }
                 }
                 if (maximum.HasValue)
                     output.Add(new Dictionary<string, object>
                     {
-                        { "kind", kind }, { "name", hardware.Name },
+                        { "kind", kind }, { "name", hardware.Name + " · " + maximumName },
                         { "temp_c", Math.Round(maximum.Value, 2) },
                         { "source", "LibreHardwareMonitor" }
                     });

@@ -29,6 +29,9 @@ or proof of sensor availability. The upstream versioned source and separate real
 - RAMSPDToolkit-NDD uses the LHM PawnIO adapter rather than shipping its own WinRing0 implementation.
 - DIMM `/temperature/0` is the live module temperature; later indices describe resolution and alarm limits.
   Taking the maximum of every Temperature-typed DIMM field would produce false readings.
+- StorageDevice temperature indices 0-8 are live composite/probe readings. Indices 10/11 are warning/critical
+  setpoints and are excluded even though upstream categorizes them as temperatures. The selected probe name
+  accompanies each reading so the dashboard tooltip identifies which measurement supplied the maximum.
 - Only temperature readings are serialized. Hardware control setters are not called by the bridge.
 - Sampling uses the upstream sensor API. Some sensor drivers can retain their last valid value after a hardware
   read fails; a bridge timestamp establishes successful bridge polling, not an independent timestamp per sensor.
@@ -42,5 +45,6 @@ or proof of sensor availability. The upstream versioned source and separate real
 - https://github.com/LibreHardwareMonitor/LibreHardwareMonitor/blob/v0.9.6/LibreHardwareMonitor/UI/MainForm.cs
 - https://github.com/LibreHardwareMonitor/LibreHardwareMonitor/blob/v0.9.6/LibreHardwareMonitorLib/Hardware/Cpu/Amd17Cpu.cs
 - https://github.com/LibreHardwareMonitor/LibreHardwareMonitor/blob/v0.9.6/LibreHardwareMonitorLib/Hardware/Memory/DimmMemory.cs
+- https://github.com/LibreHardwareMonitor/LibreHardwareMonitor/blob/v0.9.6/LibreHardwareMonitorLib/Hardware/Storage/StorageDevice.cs
 - https://github.com/LibreHardwareMonitor/LibreHardwareMonitor/blob/v0.9.6/LibreHardwareMonitorLib/RAMSPDToolkitDriver.cs
 - https://github.com/namazso/PawnIO.Modules/wiki/Using-PawnIO-Modules#licensing-considerations
