@@ -48,3 +48,16 @@ or proof of sensor availability. The upstream versioned source and separate real
 - https://github.com/LibreHardwareMonitor/LibreHardwareMonitor/blob/v0.9.6/LibreHardwareMonitorLib/Hardware/Storage/StorageDevice.cs
 - https://github.com/LibreHardwareMonitor/LibreHardwareMonitor/blob/v0.9.6/LibreHardwareMonitorLib/RAMSPDToolkitDriver.cs
 - https://github.com/namazso/PawnIO.Modules/wiki/Using-PawnIO-Modules#licensing-considerations
+
+## Validation status
+
+- Built the sensor bridge and packaged Windows executable successfully.
+- Checked the live dashboard at 700px: four cards retain their layout and display small temperature badges.
+- Verified live GPU and storage readings through the packaged app. Storage alarm setpoints are excluded;
+  tooltips identify the selected live probe. Missing CPU/DIMM prerequisites produce unavailable values, not zeroes.
+- The five temperature data/freshness/nonblocking unit tests pass. The broader suite excluding the pre-existing
+  concurrent file-IPC timing failure passes (81 tests, one platform privilege skip). The excluded test also fails
+  on the unchanged baseline under the same environment.
+- CPU/DIMM hardware validation remains pending completion of the official PawnIO installer's interactive dialog.
+  After installation, restart the monitor to reinitialize the sensor bridge. DIMM readings additionally require
+  physically supported, accessible module sensors.
