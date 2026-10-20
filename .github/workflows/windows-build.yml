@@ -1,0 +1,42 @@
+name: Windows build and checks
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          architecture: x64
+          cache: pip
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Prepare and build from checkout
+        shell: pwsh
+        run: ./build.ps1
+      - name: Python checks
+        shell: pwsh
+        env:
+          RESOURCE_ANALYZER_DISABLE_SENSORS: '1'
+        run: ./.venv-build/Scripts/python.exe -m unittest test_onboarding test_governor_http test_monitor test_system_metrics test_temperatures
+      - name: JavaScript checks
+        run: node --test test_speedtest.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ResourceAnalyzer-Windows-x64-${{ github.sha }}
+          path: |
+            dist/ResourceAnalyzer.exe
+            dist/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 30

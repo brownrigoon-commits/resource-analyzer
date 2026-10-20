@@ -8,12 +8,16 @@ From this repository, run:
 
 ```powershell
 python tools/backup_installables.py --outputs-root <project-output-directory> --sensor-archive <LibreHardwareMonitor.zip>
+# Or back up the executable produced by build.ps1:
+python tools/backup_installables.py --package-dir dist
 ```
 
 The command backs up allowlisted installation artifacts from `ResourceAnalyzer-v*` and `NVIDIA-Studio-*`
 output folders, the complete sensor bridge/dependency package, the optional upstream sensor ZIP and local
 Codex working instructions. It also creates and verifies a Git source bundle for offline restoration.
 The portable analyzer executable includes its Python runtime and browser assets; it does not require a local ML model.
+`--package-dir` includes a standalone build folder containing `ResourceAnalyzer.exe`; both options may be combined.
+Read [continue-work.md](continue-work.md) for clean-clone setup and restoring development on another PC.
 
 Every copied file is verified by size and SHA-256. Equal content is verified and reused from an E-drive object
 store; snapshots link to E-drive objects where supported, with verified copies as fallback. No links point back

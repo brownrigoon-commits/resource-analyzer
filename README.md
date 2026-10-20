@@ -2,6 +2,9 @@
 
 Windows PC의 CPU·메모리·디스크·GPU 사용량을 프로그램별로 확인하고 기록하는 로컬 앱입니다. 브라우저에서 실시간 사용량과 추이를 비교할 수 있습니다.
 
+**다른 PC나 채팅에서 개발을 이어가려면 [작업 인계·환경 준비 안내](docs/continue-work.md)부터 읽어 주세요.**
+소스·UI·의존성·빌드 절차는 이 저장소에, 설치/복원 파일은 E드라이브의 프로젝트별 버전 폴더에 보관합니다.
+
 ## 사용하기
 
 PC 설치·배포 파일은 GitHub 코드와 별도로 E드라이브에도 버전별로 보관합니다.
@@ -164,19 +167,23 @@ CUDA 계산은 완료·동기화한 뒤 경계를 호출해야 합니다. 정상
 
 ## 소스에서 실행하기
 
-Python 3.11과 Windows 환경을 기준으로 개발합니다.
+Windows x64와 Python 3.12 x64를 기준으로 검증합니다(Python 3.11 이상 허용).
 
 ```powershell
 git clone https://github.com/brownrigoon-commits/resource-analyzer.git
 cd resource-analyzer
-py -3.11 -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+powershell -NoProfile -ExecutionPolicy Bypass -File .\setup.ps1
 .\.venv\Scripts\python.exe entrypoint.py
 ```
 
 소스 실행에도 기본 포트 `7442`와 같은 로컬 데이터 폴더를 사용합니다. 같은 PC에서 이미 실행 중인 앱이 있다면 새 인스턴스 대신 기존 화면을 사용합니다.
 
-실행 파일을 직접 빌드하려면 `./build.ps1`을 실행합니다. 빌드는 별도 `.venv-build` 환경을 만들고 `dist/ResourceAnalyzer.exe`를 생성합니다. GitHub Actions 자동 빌드는 [선택용 워크플로 템플릿](templates/windows-release.yml)을 제공합니다. 사용하려면 해당 파일을 저장소의 `.github/workflows/`에 넣어야 하며, 현재 릴리스는 로컬에서 빌드하고 실행을 검증한 파일입니다.
+준비 명령은 Python 의존성과 해시로 확인한 온도 센서 엔진을 함께 준비합니다. 드라이버를 설치하거나 앱을 실행하지는 않습니다.
+
+실행 파일을 직접 빌드하려면 `powershell -NoProfile -ExecutionPolicy Bypass -File .\build.ps1`을 실행합니다.
+별도 `.venv-build` 환경과 센서 엔진을 준비하고 `dist/ResourceAnalyzer.exe`, `dist/SHA256SUMS.txt`를 생성합니다.
+[Windows 빌드 워크플로](.github/workflows/windows-build.yml)는 main push·PR·수동 실행에서 검사와 빌드를 수행합니다.
+Actions 산출물은 30일 보관되므로 영구 보관은 버전별 E 백업과 게시된 Releases를 사용합니다.
 
 ## 라이선스
 

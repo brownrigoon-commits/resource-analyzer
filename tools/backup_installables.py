@@ -31,16 +31,17 @@ def digest(path):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--outputs-root', type=Path, required=True)
+    parser.add_argument('--outputs-root', type=Path)
+    parser.add_argument('--package-dir', type=Path, help='A standalone build folder, e.g. dist')
     parser.add_argument('--sensor-archive', type=Path)
     args = parser.parse_args()
-    outputs = args.outputs_root.resolve(strict=True)
+    outputs = args.outputs_root.resolve(strict=True) if args.outputs_root else None
     drive_root = Path('E:/RIGOON_STUDIO').resolve(strict=True)
     destination_root = BACKUP_ROOT.resolve()
     if not destination_root.is_relative_to(drive_root):
         raise RuntimeError('Backup destination must remain under E:/RIGOON_STUDIO')
     candidates = []
-    for directory in sorted(outputs.iterdir()):
+    for directory in sorted(outputs.iterdir()) if outputs else []:
         if not directory.is_dir() or not directory.name.startswith(('ResourceAnalyzer-v', 'NVIDIA-Studio-')):
             continue
         for source in sorted(directory.rglob('*')):
@@ -48,6 +49,16 @@ def main():
                 if source.is_symlink() or not source.resolve().is_relative_to(outputs):
                     raise RuntimeError('Artifact path points outside the selected output directory')
                 candidates.append((source, Path('installables') / source.relative_to(outputs)))
+    if args.package_dir:
+        package = args.package_dir.resolve(strict=True)
+        executable = package / 'ResourceAnalyzer.exe'
+        if not executable.is_file():
+            raise RuntimeError('Package folder must contain ResourceAnalyzer.exe')
+        for source in sorted(package.rglob('*')):
+            if source.is_file() and source.suffix.lower() in EXTENSIONS:
+                if source.is_symlink() or not source.resolve().is_relative_to(package):
+                    raise RuntimeError('Package artifact points outside its folder')
+                candidates.append((source, Path('installables/ResourceAnalyzer-build') / source.relative_to(package)))
     sensor_root = ROOT / 'vendor/sensors'
     if sensor_root.is_dir():
         for source in sorted(sensor_root.rglob('*')):
@@ -135,12 +146,16 @@ def main():
         manifest['source_commit'] = commit
         (snapshot / 'RESTORE.txt').write_text(
             'Resource Analyzer PC installation backup\n\n'
-            '1. Run installables/ResourceAnalyzer-v*/ResourceAnalyzer.exe (prefer the newest version).\n'
+            '1. Run installables/ResourceAnalyzer-*/ResourceAnalyzer.exe (prefer the newest version).\n'
             '2. Open http://127.0.0.1:7442/dashboard in the same PC browser.\n'
             '3. If CPU/RAM sensors are unavailable on a restored PC, run the bundled official PawnIO installer\n'
             '   or ResourceAnalyzer.exe --install-temperature-support, then restart the app.\n'
             '4. NVIDIA-Studio-* contains the original NVIDIA driver installer; hardware compatibility still applies.\n'
             '5. Source can be restored with: git clone resource-analyzer.git.bundle resource-analyzer\n\n'
+            '   Then read docs/continue-work.md in that clone for setup, build, tests and handoff.\n'
+            '   For source setup without re-downloading sensor files, pass --archive upstream/LibreHardwareMonitor.zip\n'
+            '   and --pawnio-installer sensor-engine/PawnIO_setup.exe to tools/build_sensor_bridge.py.\n'
+            '   Python development still needs Python/pip dependencies; the packaged app includes its runtime.\n\n'
             'manifest.json records SHA-256 and byte size for every copied artifact and the source bundle.\n'
             'Identical artifacts reuse verified E-drive objects through hardlinks where supported.\n'
             'Copy backup files to a working folder before editing them. The C-drive originals are independent.\n'
