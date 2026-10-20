@@ -1,11 +1,12 @@
 [CmdletBinding()]
 param(
     [string]$Python = 'python',
-    [string]$VenvPath = (Join-Path $PSScriptRoot '.venv-build'),
+    [string]$VenvPath,
     [string]$SensorArchive,
     [string]$PawnIOInstaller
 )
 $ErrorActionPreference = 'Stop'
+if (-not $VenvPath) { $VenvPath = Join-Path $PSScriptRoot '.venv-build' }
 $VenvPython = Join-Path $VenvPath 'Scripts\python.exe'
 & (Join-Path $PSScriptRoot 'setup.ps1') -Python $Python -VenvPath $VenvPath -Build -SensorArchive $SensorArchive -PawnIOInstaller $PawnIOInstaller
 Push-Location $PSScriptRoot

@@ -1,12 +1,13 @@
 [CmdletBinding()]
 param(
     [string]$Python = 'python',
-    [string]$VenvPath = (Join-Path $PSScriptRoot '.venv'),
+    [string]$VenvPath,
     [switch]$Build,
     [string]$SensorArchive,
     [string]$PawnIOInstaller
 )
 $ErrorActionPreference = 'Stop'
+if (-not $VenvPath) { $VenvPath = Join-Path $PSScriptRoot '.venv' }
 $VenvPython = Join-Path $VenvPath 'Scripts\python.exe'
 if (-not (Test-Path -LiteralPath $VenvPython)) {
     & $Python -c "import sys, struct; assert sys.version_info >= (3, 11) and struct.calcsize('P') == 8, 'Python 3.11+ x64 required (3.12 tested)'"
