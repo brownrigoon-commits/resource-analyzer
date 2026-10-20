@@ -133,6 +133,7 @@ def main():
     parser.add_argument('--data-dir', help='기록과 로그를 저장할 폴더')
     parser.add_argument('--autostart', action='store_true', help='수집도 즉시 시작')
     parser.add_argument('--stop', action='store_true', help='현재 분석기 서비스 종료')
+    parser.add_argument('--apply-update', action='store_true', help='사용자가 선택한 배포본을 검증하고 정상 갱신')
     parser.add_argument('--no-browser', action='store_true', help='브라우저를 열지 않음')
     parser.add_argument('--install-temperature-support', action='store_true', help='공식 온도 센서 드라이버 설치')
     args = parser.parse_args()
@@ -151,6 +152,9 @@ def main():
     logging.basicConfig(filename=directory / 'launcher.log', encoding='utf-8',
                         level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
     try:
+        if args.apply_update:
+            from updater import apply_update
+            return apply_update(args, directory)
         if args.serve or args.stop:
             return serve(args)
         return launch(args, directory)

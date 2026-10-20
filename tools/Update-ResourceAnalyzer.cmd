@@ -1,6 +1,6 @@
 @echo off
 setlocal
-powershell.exe -NoLogo -NoProfile -File "%~dp0Update-ResourceAnalyzer.ps1"
+"%~dp0ResourceAnalyzer.exe" --apply-update --autostart
 if errorlevel 1 (
   echo Update did not complete. Please keep this message for troubleshooting.
   pause
