@@ -87,9 +87,9 @@ class Collector:
         except OSError:
             pass
         psutil.cpu_percent(percpu=True)
-        self.sample()  # Prime cumulative CPU and I/O deltas before publication.
+        self.sample(initializing=True)  # Never enumerate every PID during PDH warmup.
 
-    def sample(self):
+    def sample(self, *, initializing=False):
         now = time.monotonic()
         elapsed = max(.01, now - self.last_tick)
         ts = time.time()
@@ -105,7 +105,8 @@ class Collector:
         gpu_available = bool(gpu_data.get('processes_available', gpu_data.get('available')))
         processes = {}
         process_data = self.process_sampler.sample()
-        readings = process_data.get('rows', []) if process_data.get('available') else self._fallback_processes(elapsed)
+        readings = (process_data.get('rows', []) if process_data.get('available')
+                    else [] if initializing else self._fallback_processes(elapsed))
         current = set()
         denied = 0
         for raw in readings:

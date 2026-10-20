@@ -89,6 +89,18 @@ class GovernorTests(unittest.TestCase):
         self.assertEqual((grant['decision'], grant['gpu_layers']), ('cuda', -1))
         self.release(grant, stage='qwen-vision')
 
+    def test_complete_windows_adapter_measurements_can_share_qwen(self):
+        self.gov.configure(True)
+        value = sample()
+        value['system']['gpus'].append({'source': 'Windows DXGI/PDH', 'util_pct': 5})
+        self.gov.update(value, observed_at=self.now)
+        grant = self.gov.acquire(request(stage='qwen-vision'))
+        self.assertEqual(grant['decision'], 'hybrid')
+        self.release(grant, stage='qwen-vision')
+        value['system']['gpus'][1]['util_pct'] = None
+        self.gov.update(value, observed_at=self.now)
+        self.assertEqual(self.gov.acquire(request('warmup', stage='qwen-vision'))['decision'], 'wait')
+
     def test_gpu_threshold_and_five_second_hysteresis(self):
         self.gov.configure(True)
         self.update(gpu=59.9)

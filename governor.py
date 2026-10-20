@@ -251,7 +251,7 @@ class Governor:
                     raise ValueError('GPU 전체 사용률을 확인할 수 없습니다.')
                 totals = []
                 for gpu in gpus:
-                    if not isinstance(gpu, dict) or gpu.get('source') not in ('NVML', 'nvidia-smi'):
+                    if not isinstance(gpu, dict) or gpu.get('source') not in ('NVML', 'nvidia-smi', 'Windows DXGI/PDH'):
                         raise ValueError('지원되는 GPU 전체 측정값이 필요합니다.')
                     util = gpu.get('util_pct')
                     if not _number(util) or not 0 <= util <= 100:
