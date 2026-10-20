@@ -63,6 +63,8 @@ Authenticode signature verified, installation exit code 0, driver service Runnin
 the monitor, CPU, both DIMMs, integrated AMD GPU and storage temperatures were observed in Chrome.
 The discrete AMD GPU rejected temperature requests through the current AMD ADL path; a separate
 Windows D3DKMT probe successfully read both discrete and integrated GPU temperatures by exact LUID.
+The final executable was built from a clean, separate GitHub checkout and validated on an isolated
+port/data directory with CPU, both DIMMs, both GPUs and storage temperatures present.
 The explicit Python suite passes 60 tests, including 26 GPU tests and
 8 temperature tests. Personal sensor readings and device identifiers are not committed.
 
