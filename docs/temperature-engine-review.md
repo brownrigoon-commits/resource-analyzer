@@ -37,6 +37,9 @@ or proof of sensor availability. The upstream versioned source and separate real
   CPU/DIMM PawnIO prerequisite gate; diagnostics are separated by hardware category.
   GPU sensor identifiers are retained independently from DXGI identifiers. The UI shows the highest
   available GPU sensor temperature and a named sensor list, without guessing adapter matches.
+- The Windows sampler also reads D3DKMT_ADAPTER_PERFDATA by exact DXGI LUID. SDK x64 layout,
+  NTSTATUS results, 0.1°C units and handle cleanup are checked; unsupported/invalid values stay missing.
+  A zero reading is rejected as the app's conservative plausibility policy, not a documented API sentinel.
 - Sampling uses the upstream sensor API. Some sensor drivers can retain their last valid value after a hardware
   read fails; a bridge timestamp establishes successful bridge polling, not an independent timestamp per sensor.
 - The elevated bridge emits JSON on a random, current-user-scoped, output-only named pipe. It accepts no commands,
@@ -58,8 +61,9 @@ or proof of sensor availability. The upstream versioned source and separate real
 Current PC validation (2026-10-20, version 0.5.2): official PawnIO 2.1.0 installer checksum and
 Authenticode signature verified, installation exit code 0, driver service Running. After restarting
 the monitor, CPU, both DIMMs, integrated AMD GPU and storage temperatures were observed in Chrome.
-The discrete AMD GPU rejected temperature requests through the current AMD ADL path; its temperature
-is not inferred from the integrated GPU. The explicit Python suite passes 53 tests, including
+The discrete AMD GPU rejected temperature requests through the current AMD ADL path; a separate
+Windows D3DKMT probe successfully read both discrete and integrated GPU temperatures by exact LUID.
+The explicit Python suite passes 60 tests, including 26 GPU tests and
 8 temperature tests. Personal sensor readings and device identifiers are not committed.
 
 Earlier validation, on the previous environment:

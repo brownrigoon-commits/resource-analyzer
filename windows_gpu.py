@@ -8,6 +8,7 @@ never used to associate a counter with a card.
 from __future__ import annotations
 
 import ctypes as ct
+from functools import lru_cache
 import math
 import os
 from pathlib import Path
@@ -46,6 +47,128 @@ class _AdapterDesc1(ct.Structure):
         ("shared_system_memory", ct.c_size_t),
         ("luid", _Luid), ("flags", ct.c_uint32),
     ]
+
+
+class _OpenAdapterFromLuid(ct.Structure):
+    _fields_ = [("luid", _Luid), ("handle", ct.c_uint32)]
+
+
+class _CloseAdapter(ct.Structure):
+    _fields_ = [("handle", ct.c_uint32)]
+
+
+class _QueryAdapterInfo(ct.Structure):
+    _fields_ = [("handle", ct.c_uint32), ("type", ct.c_int32),
+                ("data", ct.c_void_p), ("size", ct.c_uint32)]
+
+
+class _AdapterPerfData(ct.Structure):
+    # Windows SDK d3dkmthk.h: D3DKMT_ADAPTER_PERFDATA. Use fixed-width
+    # Windows ULONG/UINT types; D3DKMT_HANDLE is a UINT, not a pointer.
+    _fields_ = [
+        ("physical_index", ct.c_uint32),
+        ("memory_frequency", ct.c_uint64),
+        ("max_memory_frequency", ct.c_uint64),
+        ("max_memory_frequency_oc", ct.c_uint64),
+        ("memory_bandwidth", ct.c_uint64),
+        ("pcie_bandwidth", ct.c_uint64),
+        ("fan_rpm", ct.c_uint32), ("power", ct.c_uint32),
+        ("temperature", ct.c_uint32), ("power_state_override", ct.c_uint8),
+    ]
+
+
+@lru_cache(maxsize=1)
+def _get_d3dkmt_api():
+    if os.name != "nt":
+        return None, "Windows GPU temperature queries are unavailable on this platform."
+    try:
+        dll_path = Path(os.environ.get("SystemRoot", r"C:\Windows")) / "System32" / "gdi32.dll"
+        api = ct.WinDLL(str(dll_path))
+        for name, structure in (
+            ("D3DKMTOpenAdapterFromLuid", _OpenAdapterFromLuid),
+            ("D3DKMTQueryAdapterInfo", _QueryAdapterInfo),
+            ("D3DKMTCloseAdapter", _CloseAdapter),
+        ):
+            fn = getattr(api, name)
+            fn.argtypes, fn.restype = [ct.POINTER(structure)], ct.c_int32
+        return api, None
+    except (OSError, AttributeError) as exc:
+        return None, "Windows GPU temperature API unavailable: " + str(exc)
+
+
+def _temperature_c(raw):
+    # Microsoft specifies deci-Celsius (1 == 0.1 C), but does not designate
+    # zero as an unsupported-value sentinel. Rejecting zero and >150 C is this
+    # monitor's conservative plausibility policy, separate from NTSTATUS checks.
+    number = _number(raw)
+    return round(number / 10, 1) if number is not None and 0 < number <= 1500 else None
+
+
+def sample_adapter_temperatures(adapters):
+    """Read temperature by exact DXGI LUID, closing every opened KMT handle.
+
+    No vendor DLL, administrator permission, or additional driver is required.
+    Drivers may decline this WDDM query; failed/invalid reads remain absent.
+    For a linked adapter, expose the hottest valid physical-adapter reading.
+    https://learn.microsoft.com/windows-hardware/drivers/ddi/d3dkmthk/ns-d3dkmthk-_d3dkmt_adapter_perfdata
+    https://learn.microsoft.com/windows-hardware/drivers/ddi/d3dkmthk/nf-d3dkmthk-d3dkmtqueryadapterinfo
+    """
+    if not adapters:
+        return {}, []
+    api, error = _get_d3dkmt_api()
+    if api is None:
+        return {}, [error]
+    temperatures, errors = {}, []
+    for adapter in adapters:
+        luid = adapter.get("adapter_luid", "")
+        match = re.fullmatch(r"(0x[0-9a-f]{1,8})_(0x[0-9a-f]{1,8})", luid, re.IGNORECASE)
+        label = adapter.get("name", "Windows GPU")
+        if match is None:
+            errors.append(f"{label} temperature unavailable: invalid adapter LUID.")
+            continue
+        high, low = (int(part, 16) for part in match.groups())
+        request = _OpenAdapterFromLuid(_Luid(low, high), 0)
+        opened = False
+        try:
+            status = api.D3DKMTOpenAdapterFromLuid(ct.byref(request))
+            if status != 0 or not request.handle:
+                errors.append(f"{label} temperature open unavailable: 0x{status & 0xffffffff:08X}.")
+                continue
+            opened = True
+            count = ct.c_uint32()
+            query = _QueryAdapterInfo(request.handle, 30, ct.addressof(count), ct.sizeof(count))
+            status = api.D3DKMTQueryAdapterInfo(ct.byref(query))  # PHYSICALADAPTERCOUNT
+            if status != 0 or not 0 < count.value <= 32:
+                errors.append(f"{label} temperature adapter count unavailable: 0x{status & 0xffffffff:08X}.")
+                continue
+            values = []
+            for physical in range(count.value):
+                data = _AdapterPerfData()
+                data.physical_index = physical
+                query = _QueryAdapterInfo(request.handle, 62, ct.addressof(data), ct.sizeof(data))
+                status = api.D3DKMTQueryAdapterInfo(ct.byref(query))  # ADAPTERPERFDATA
+                if status != 0:
+                    errors.append(f"{label} temperature query unavailable: 0x{status & 0xffffffff:08X}.")
+                    continue
+                value = _temperature_c(data.temperature)
+                if value is not None:
+                    values.append(value)
+            if values:
+                temperatures[luid_key(high, low)] = max(values)
+            else:
+                errors.append(f"{label} has no valid Windows GPU temperature reading.")
+        except (OSError, AttributeError, ValueError) as exc:
+            errors.append(f"{label} temperature unavailable: {type(exc).__name__}.")
+        finally:
+            if opened:
+                try:
+                    closing = _CloseAdapter(request.handle)
+                    status = api.D3DKMTCloseAdapter(ct.byref(closing))
+                    if status != 0:
+                        errors.append(f"{label} temperature handle close failed: 0x{status & 0xffffffff:08X}.")
+                except (OSError, AttributeError, ValueError) as exc:
+                    errors.append(f"{label} temperature handle close failed: {type(exc).__name__}.")
+    return temperatures, errors
 
 
 def luid_key(high: int, low: int) -> str:

@@ -80,7 +80,7 @@
     // temperature to the busiest GPU by guessing its name or enumeration order.
     const gpuReadings=stale?[]:[
       ...rows(temperatures.gpu?.sensors).filter(s=>finite(s.temp_c)),
-      ...rows(sys.gpus).filter(g=>finite(g.temp_c)).map(g=>({name:`${g.name||"GPU"} · ${g.source||"장치 온도"}`,temp_c:g.temp_c}))
+      ...rows(sys.gpus).filter(g=>finite(g.temp_c)).map(g=>({name:`${g.name||"GPU"} · ${g.temp_source||g.source||"장치 온도"}`,temp_c:g.temp_c}))
     ];
     const gpuTemperature=gpuReadings.length?{
       temp_c:Math.max(...gpuReadings.map(s=>s.temp_c)),status:"ok",

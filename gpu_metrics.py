@@ -21,7 +21,8 @@ import subprocess
 import threading
 import time
 
-from windows_gpu import aggregate_engines, aggregate_memory, enumerate_adapters
+from windows_gpu import (aggregate_engines, aggregate_memory, enumerate_adapters,
+                         sample_adapter_temperatures)
 
 
 _GIB = 1024 ** 3
@@ -274,6 +275,8 @@ class GpuSampler:
         errors = list(self._windows_errors)
         if not adapters:
             return [], errors
+        temperatures, temperature_errors = sample_adapter_temperatures(adapters)
+        errors.extend(temperature_errors)
         dedicated, shared = {}, {}
         if self._pdh_collected:
             rows, _, counter_errors = self._read_counter(self._memory_counter, "dedicated memory")
@@ -297,7 +300,9 @@ class GpuSampler:
                 "vram_pct": _pct(used * 100 / total) if used is not None and total else None,
                 "shared_used_gb": round(shared_used / _GIB, 4) if shared_used is not None else None,
                 "shared_total_gb": round(adapter["shared_bytes"] / _GIB, 4),
-                "temp_c": None, "source": "Windows DXGI/PDH",
+                "temp_c": temperatures.get(luid),
+                "temp_source": "Windows D3DKMT" if luid in temperatures else None,
+                "source": "Windows DXGI/PDH",
             })
         return gpus, errors
 

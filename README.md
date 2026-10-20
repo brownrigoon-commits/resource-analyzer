@@ -47,7 +47,9 @@ GPU가 여러 개면 상단 카드에는 측정된 사용률이 가장 높은 �
 전용 메모리와 시스템 RAM을 사용하는 공유 메모리는 구분합니다. 공유 메모리 한도는 추가 VRAM 용량이 아닙니다.
 GPU 이름을 확인했어도 드라이버가 사용률·메모리·온도를 제공하지 않으면 해당 값은 **— / 확인 불가**로 남습니다.
 Windows 카운터를 읽지 못했거나 새 측정을 기다리는 동안 0%로 대체하거나 이전 값을 재사용하지 않습니다.
-이 경로는 드라이버 설치나 관리자 권한 없이 읽으며, DXGI/PDH는 GPU 온도를 제공하지 않습니다.
+사용률·메모리 경로는 별도 드라이버 설치나 관리자 권한 없이 읽습니다.
+GPU 온도는 드라이버가 지원하는 경우 Windows D3DKMT API에서도 읽으며, DXGI LUID로 정확한 장치에 연결합니다.
+Windows 사용률 API인 DXGI/PDH 자체는 온도를 제공하지 않습니다.
 
 측정 기준: [Microsoft GPU 사용률 설명](https://devblogs.microsoft.com/directx/gpus-in-the-task-manager/),
 [DXGI 장치 정보와 메모리 구분](https://learn.microsoft.com/en-us/windows/win32/api/dxgi/ns-dxgi-dxgi_adapter_desc1).
@@ -109,7 +111,7 @@ MIT 라이선스는 `third_party/Cloudflare-Speedtest-LICENSE.txt`에 포함되�
 
 ## 온도 센서 엔진
 
-CPU·GPU·메모리·디스크 카드 안에 작은 온도를 표시합니다. GPU는 NVIDIA 측정값과
+CPU·GPU·메모리·디스크 카드 안에 작은 온도를 표시합니다. GPU는 NVIDIA 측정값, Windows D3DKMT와
 LibreHardwareMonitor 0.9.6의 AMD·Intel·NVIDIA 센서를 사용합니다. 나머지 부품도 같은 센서 엔진을 사용합니다.
 여러 센서가 읽히면 그 부품의 최고 측정 온도를 표시하며, 마우스를 올리면 개별 센서를 확인할 수 있습니다.
 GPU 온도는 측정 가능한 모든 GPU 센서 중 최고값이며, 사용률이 가장 높은 장치와 다를 수 있습니다.

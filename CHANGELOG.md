@@ -3,6 +3,7 @@
 ## 0.5.2 — 2026-10-20
 
 - LibreHardwareMonitor의 AMD·Intel·NVIDIA GPU 온도 수집을 활성화했습니다.
+- 제조사 전용 센서 API가 실패해도 Windows D3DKMT가 제공하는 GPU 온도를 정확한 장치 식별자로 읽습니다.
 - GPU 온도 센서의 실제 장치명과 최고 측정 온도를 별도로 표시하며, 사용률이 가장 높은 GPU에 임의로 연결하지 않습니다.
 - CPU·메모리의 PawnIO 미설치 오류를 GPU 센서 오류와 분리하고, 오래된 온도는 숨깁니다.
 - 공식 PawnIO 2.1.0 설치 파일·출처·라이선스·대응 소스를 `installers/`에 보관하고 Windows 배포 폴더에도 포함합니다.

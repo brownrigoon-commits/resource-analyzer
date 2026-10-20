@@ -87,10 +87,10 @@ GitHub Actions는 Windows에서 위의 명시된 Python 검사, JavaScript 검�
 - Windows GPU 사용률은 엔진별 프로세스 기여도를 합한 뒤 장치에서 가장 높은 엔진을 선택한다.
   중복 인스턴스는 중복 합산하지 않으며 PID 0은 장치 집계에만 포함한다. 카운터 실패·워밍업 시
   이전 값이나 가짜 0%를 표시하지 않는다. 전용 메모리와 공유 RAM은 구분한다.
-- Windows DXGI/PDH는 GPU 온도를 제공하지 않는다. 안정 분배의 CUDA 작업 보호는 기존 NVIDIA
+- GPU 온도는 Windows D3DKMT에서도 읽으며 DXGI LUID로 연결한다. 안정 분배의 CUDA 작업 보호는 기존 NVIDIA
   공급원 제한을 유지하며, AMD/Intel 사용량 표시가 CUDA 작업 지원을 뜻하지 않는다.
 - 이전 환경 준비 검증: 별도 GitHub clone + 새 가상환경에서 센서 다운로드/해시 확인·Windows 실행 파일 빌드 성공.
-  이번 GPU·온도 수정 후 명시된 Python 53개·JavaScript 5개 검사가 통과했다.
+  이번 GPU·온도 수정 후 명시된 Python 60개·JavaScript 5개 검사가 통과했다.
 - `test_gpu_windows.py`는 제조사·LUID 분리, 중복 엔진, PID 0, 메모리 집계, 미측정·실패·워밍업,
   NVIDIA/AMD 혼합 구성, 불완전한 NVIDIA 열거, 유효한 Windows 대체값이 없을 때 native 값 보존을 검사한다.
 - 이번 GPU 수정은 실제 AMD 외장·내장 GPU가 함께 있는 Windows PC에서 API와 Chrome 화면으로 확인했다.
@@ -102,7 +102,7 @@ GitHub Actions는 Windows에서 위의 명시된 Python 검사, JavaScript 검�
   사용률 장치와 온도 장치를 이름·순서로 추측 연결하지 않는다.
 - 사용자 요청으로 공식 PawnIO 2.1.0을 해시·서명 검증 후 설치했다. 설치 종료 코드 0,
   서비스 Running을 확인했다. 재시작 후 CPU·DIMM 2개·내장 AMD GPU·디스크 온도가 측정됐다.
-  외장 AMD GPU는 현재 ADL 경로에서 온도 요청이 거절되어 추정하지 않는다.
+  외장 AMD GPU의 ADL 온도 요청이 거절되는 문제는 별도 Windows D3DKMT 경로로 보완했다.
 - 이 PC에는 E드라이브가 연결되어 있지 않아 E 설치 파일 백업은 수행할 수 없다.
   실행 파일은 작업 출력 폴더에 보관하고, E가 연결된 PC에서 위 백업 절차를 이어간다.
 - 인터넷 500Mbps/1Gbps **가입 상품**은 아직 확인되지 않았다. 공유기 로그인은 통신사 가입상품 로그인과 다르다.

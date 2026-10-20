@@ -4,7 +4,10 @@ import unittest
 from unittest.mock import Mock, patch
 
 from gpu_metrics import GpuSampler, _PdhItem, _PDH_MORE_DATA
-from windows_gpu import aggregate_engines, aggregate_memory, luid_key
+from windows_gpu import (aggregate_engines, aggregate_memory, luid_key,
+                         sample_adapter_temperatures, _temperature_c,
+                         _OpenAdapterFromLuid, _CloseAdapter, _QueryAdapterInfo,
+                         _AdapterPerfData)
 
 
 LUID_A = "0x00000000_0x00000a01"
@@ -94,6 +97,11 @@ class WindowsAggregationTests(unittest.TestCase):
 
 
 class WindowsSamplerTests(unittest.TestCase):
+    def setUp(self):
+        temperatures = patch("gpu_metrics.sample_adapter_temperatures", return_value=({}, []))
+        self.temperatures = temperatures.start()
+        self.addCleanup(temperatures.stop)
+
     def test_counter_mapping_uses_luid_even_when_adapter_names_match(self):
         with sampler([adapter(LUID_B), adapter(LUID_A)]) as gpu:
             gpu._pdh_collected = True
@@ -174,6 +182,25 @@ class WindowsSamplerTests(unittest.TestCase):
             self.assertEqual(len(result["gpus"]), 2)
             self.assertIs(result["gpus"][0], nvidia)
             self.assertEqual(result["gpus"][1]["adapter_luid"], LUID_B)
+
+    def test_windows_temperature_is_mapped_by_luid_with_its_own_source(self):
+        self.temperatures.return_value = ({LUID_A: 46, LUID_B: 38}, [])
+        with sampler([adapter(LUID_B), adapter(LUID_A)]) as gpu:
+            gpu._pdh = None
+            devices = gpu.sample()["gpus"]
+            self.assertEqual([device["temp_c"] for device in devices], [38, 46])
+            self.assertTrue(all(device["temp_source"] == "Windows D3DKMT" for device in devices))
+
+    def test_native_temperature_is_preserved_and_missing_temperature_does_not_switch_source(self):
+        self.temperatures.return_value = ({LUID_A: 46}, [])
+        for native_temperature in (62, None):
+            with self.subTest(temp=native_temperature), sampler([adapter(LUID_A, 0x10DE)]) as gpu:
+                gpu._pdh = None
+                gpu._nvml = Mock()
+                native = {"id": "gpu-7", "source": "NVML", "util_pct": 40,
+                          "vram_used_gb": 2, "temp_c": native_temperature}
+                gpu._sample_nvml = Mock(return_value=([native], []))
+                self.assertEqual(gpu.sample()["gpus"], [native])
 
     def test_partial_nvidia_enumeration_does_not_hide_the_second_card(self):
         with sampler([adapter(LUID_A, 0x10DE), adapter(LUID_B, 0x10DE)]) as gpu:
@@ -279,6 +306,107 @@ class WindowsSamplerTests(unittest.TestCase):
             self.assertTrue(available)
             self.assertEqual(errors, [])
             self.assertEqual(rows, [(names[0], 0), (names[1], 10)])
+
+
+class D3dkmtTemperatureTests(unittest.TestCase):
+    def fake_api(self, values=None, failure=None):
+        api = Mock()
+        readings = values if values is not None else {0xA01: [460]}
+        self.closed = []
+
+        def open_adapter(pointer):
+            request = ct.cast(pointer, ct.POINTER(_OpenAdapterFromLuid)).contents
+            if failure == "open":
+                return -1073741811
+            request.handle = request.luid.low
+            return 0
+
+        def query_adapter(pointer):
+            request = ct.cast(pointer, ct.POINTER(_QueryAdapterInfo)).contents
+            if failure == "exception":
+                raise OSError("Driver query failed")
+            if request.type == 30:
+                if failure == "count":
+                    return -1073741811
+                count = 33 if failure == "count_limit" else len(readings[request.handle])
+                ct.cast(request.data, ct.POINTER(ct.c_uint32))[0] = count
+            else:
+                self.assertEqual(request.type, 62)
+                self.assertEqual(request.size, ct.sizeof(_AdapterPerfData))
+                if failure == "temperature":
+                    return -1073741811
+                data = ct.cast(request.data, ct.POINTER(_AdapterPerfData)).contents
+                data.temperature = readings[request.handle][data.physical_index]
+            return 0
+
+        def close_adapter(pointer):
+            request = ct.cast(pointer, ct.POINTER(_CloseAdapter)).contents
+            self.closed.append(request.handle)
+            return -1073741811 if failure == "close" else 0
+
+        api.D3DKMTOpenAdapterFromLuid.side_effect = open_adapter
+        api.D3DKMTQueryAdapterInfo.side_effect = query_adapter
+        api.D3DKMTCloseAdapter.side_effect = close_adapter
+        return api
+
+    def test_windows_sdk_structure_layout_and_temperature_unit(self):
+        self.assertEqual(ct.sizeof(_OpenAdapterFromLuid), 12)
+        self.assertEqual(ct.sizeof(_CloseAdapter), 4)
+        self.assertEqual(_QueryAdapterInfo.data.offset, 8)
+        self.assertEqual(ct.sizeof(_QueryAdapterInfo), 24 if ct.sizeof(ct.c_void_p) == 8 else 16)
+        self.assertEqual(ct.sizeof(_AdapterPerfData), 64)
+        self.assertEqual(_AdapterPerfData.temperature.offset, 56)
+        self.assertEqual(_temperature_c(460), 46)
+        self.assertEqual(_temperature_c(381), 38.1)
+        self.assertEqual(_temperature_c(1500), 150)
+        for raw in (0, -1, 1501, 0xffffffff, None, float("nan"), float("inf")):
+            with self.subTest(raw=raw):
+                self.assertIsNone(_temperature_c(raw))
+
+    def test_exact_luid_mapping_and_every_physical_adapter_is_read_then_closed(self):
+        api = self.fake_api({0xA01: [460, 500], 0xB02: [380]})
+        with patch("windows_gpu._get_d3dkmt_api", return_value=(api, None)):
+            readings, errors = sample_adapter_temperatures([adapter(LUID_B), adapter(LUID_A)])
+        self.assertEqual(readings, {LUID_A: 50, LUID_B: 38})
+        self.assertEqual(errors, [])
+        self.assertEqual(self.closed, [0xB02, 0xA01])
+
+    def test_failed_or_invalid_queries_always_close_and_never_publish_zero(self):
+        for failure in ("count", "count_limit", "temperature", "exception"):
+            with self.subTest(failure=failure):
+                api = self.fake_api(failure=failure)
+                with patch("windows_gpu._get_d3dkmt_api", return_value=(api, None)):
+                    readings, errors = sample_adapter_temperatures([adapter()])
+                self.assertEqual(readings, {})
+                self.assertTrue(errors)
+                self.assertEqual(self.closed, [0xA01])
+        for raw in (0, 1501):
+            with self.subTest(raw=raw):
+                api = self.fake_api({0xA01: [raw]})
+                with patch("windows_gpu._get_d3dkmt_api", return_value=(api, None)):
+                    readings, errors = sample_adapter_temperatures([adapter()])
+                self.assertEqual(readings, {})
+                self.assertTrue(errors)
+                self.assertEqual(self.closed, [0xA01])
+
+    def test_failed_open_never_queries_or_closes_an_invalid_handle(self):
+        api = self.fake_api(failure="open")
+        with patch("windows_gpu._get_d3dkmt_api", return_value=(api, None)):
+            readings, errors = sample_adapter_temperatures([adapter()])
+        self.assertEqual(readings, {})
+        self.assertTrue(errors)
+        api.D3DKMTQueryAdapterInfo.assert_not_called()
+        api.D3DKMTCloseAdapter.assert_not_called()
+
+    def test_close_failure_is_reported_and_missing_api_returns_no_values(self):
+        api = self.fake_api(failure="close")
+        with patch("windows_gpu._get_d3dkmt_api", return_value=(api, None)):
+            readings, errors = sample_adapter_temperatures([adapter()])
+        self.assertEqual(readings, {LUID_A: 46})
+        self.assertTrue(any("close failed" in error for error in errors))
+        self.assertEqual(self.closed, [0xA01])
+        with patch("windows_gpu._get_d3dkmt_api", return_value=(None, "API unavailable")):
+            self.assertEqual(sample_adapter_temperatures([adapter()]), ({}, ["API unavailable"]))
 
 
 if __name__ == "__main__":
