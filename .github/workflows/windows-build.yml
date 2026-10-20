@@ -38,5 +38,7 @@ jobs:
           path: |
             dist/ResourceAnalyzer.exe
             dist/SHA256SUMS.txt
+            dist/BUILD-INFO.txt
+            dist/BUILD-DEPENDENCIES.txt
           if-no-files-found: error
           retention-days: 30

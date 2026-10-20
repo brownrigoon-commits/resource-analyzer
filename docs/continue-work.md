@@ -22,6 +22,8 @@ SensorBridge 빌드까지 수행한다. 드라이버 설치·관리자 프로세
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\build.ps1
 # dist/ResourceAnalyzer.exe, dist/SHA256SUMS.txt
+# dist/BUILD-INFO.txt (버전·소스 커밋·미커밋 변경 여부·시각·실행 파일 해시)
+# dist/BUILD-DEPENDENCIES.txt (해당 빌드에 사용한 Python 패키지 버전)
 ```
 
 같은 PC에서 실행 중인 분석기가 있으면 기본 포트 7442로 기존 화면을 연다.
@@ -79,6 +81,8 @@ GitHub Actions는 Windows에서 위의 명시된 Python 검사, JavaScript 검�
   버튼으로 실행하는 다운로드·업로드 속도 테스트 구현 완료.
 - 안정 분배는 사용자가 켤 때만 작동한다. 속도 테스트 결과나 사용량만으로 가입 회선 상품을 단정하지 않는다.
 - 이번 작업: clone 후 누락되던 센서 준비를 setup/build에 연결하고, 저장·복원·인계 절차를 저장소에 포함했다.
+- 검증: 별도 GitHub clone + 새 가상환경에서 센서 다운로드/해시 확인·Windows 실행 파일 빌드 성공.
+  Python 31개·JavaScript 5개 검사를 기준으로 확인한다. 자동 Windows 환경에서 발견한 JavaScript MIME 형식 차이도 수정했다.
 - 기존 PC의 실행 인스턴스는 이번 정리 작업에서 종료하거나 교체하지 않는다.
 - 인터넷 500Mbps/1Gbps **가입 상품**은 아직 확인되지 않았다. 공유기 로그인은 통신사 가입상품 로그인과 다르다.
 - 다음 작업 시작 시 `git log -5 --oneline`, `git status`, 원격 main을 확인하고 이 문서를 갱신한다.

@@ -16,6 +16,21 @@ try {
     $Executable = Join-Path $PSScriptRoot 'dist\ResourceAnalyzer.exe'
     $Hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $Executable).Hash.ToLowerInvariant()
     "$Hash  ResourceAnalyzer.exe" | Set-Content (Join-Path $PSScriptRoot 'dist\SHA256SUMS.txt') -Encoding ascii
+    $SourceCommit = & git rev-parse HEAD
+    if ($LASTEXITCODE -ne 0) { throw 'Could not record the source commit.' }
+    $WorkingChanges = & git status --porcelain --untracked-files=normal
+    if ($LASTEXITCODE -ne 0) { throw 'Could not record the source working state.' }
+    $AppVersion = & $VenvPython -c 'from app_paths import VERSION; print(VERSION)'
+    if ($LASTEXITCODE -ne 0) { throw 'Could not record the app version.' }
+    [ordered]@{
+        app_version = "$AppVersion"
+        source_commit = "$SourceCommit"
+        uncommitted_changes = [bool]$WorkingChanges
+        built_at_utc = [DateTime]::UtcNow.ToString('o')
+        executable_sha256 = $Hash
+    } | ConvertTo-Json | Set-Content (Join-Path $PSScriptRoot 'dist\BUILD-INFO.txt') -Encoding utf8
+    & $VenvPython -m pip freeze | Set-Content (Join-Path $PSScriptRoot 'dist\BUILD-DEPENDENCIES.txt') -Encoding utf8
+    if ($LASTEXITCODE -ne 0) { throw 'Could not record build dependencies.' }
     [pscustomobject]@{
         Executable = $Executable
         Bytes = (Get-Item -LiteralPath $Executable).Length
