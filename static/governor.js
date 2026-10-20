@@ -138,7 +138,7 @@
     if (snapshot.active && typeof active.stage === "string") {
       const adapters = Array.isArray(snapshot.adapters) ? snapshot.adapters : [];
       const adapter = adapters.find((row) => row?.stage === active.stage);
-      const device = active.device === "cpu" ? "CPU" : active.device === "cuda" ? "GPU" : string(active.device, "장치 미확인");
+      const device = active.device === "cpu" ? "CPU" : active.device === "cuda" ? "GPU" : active.device === "hybrid" ? "CPU + GPU 분담" : string(active.device, "장치 미확인");
       write("governor-active", `${string(adapter?.label, active.stage)} · ${device}${active.orphaned === true ? " · 실행 상태 확인 필요" : ""}`);
     } else if (snapshot.active === null) {
       write("governor-active", "실행 중인 연동 작업 없음");

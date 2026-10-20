@@ -65,6 +65,30 @@ class GovernorTests(unittest.TestCase):
         self.update(cpu=70)
         self.assertEqual(self.gov.acquire(request('job-2'))['decision'], 'wait')
 
+    def test_qwen_enabled_uses_shared_vision_and_cpu_summary(self):
+        self.gov.configure(True)
+        grant = self.gov.acquire(request(stage='qwen-vision'))
+        self.assertEqual((grant['decision'], grant['gpu_layers']), ('hybrid', 8))
+        self.release(grant, stage='qwen-vision', completed=True)
+        grant = self.gov.acquire(request('summary', stage='qwen-summary'))
+        self.assertEqual((grant['decision'], grant['gpu_layers']), ('cpu', 0))
+        self.release(grant, 'summary', stage='qwen-summary', completed=True)
+        self.assertEqual(self.gov.status()['stats']['cpu_completed'], 2)
+
+    def test_qwen_busy_gpu_uses_cpu_and_ram_guard_still_applies(self):
+        self.gov.configure(True)
+        self.update(gpu=99)
+        grant = self.gov.acquire(request(stage='qwen-vision'))
+        self.assertEqual(grant['decision'], 'cpu')
+        self.release(grant, stage='qwen-vision')
+        self.update(ram=81)
+        self.assertEqual(self.gov.acquire(request('blocked', stage='qwen-vision'))['decision'], 'wait')
+
+    def test_qwen_disabled_uses_full_gpu(self):
+        grant = self.gov.acquire(request(stage='qwen-vision'))
+        self.assertEqual((grant['decision'], grant['gpu_layers']), ('cuda', -1))
+        self.release(grant, stage='qwen-vision')
+
     def test_gpu_threshold_and_five_second_hysteresis(self):
         self.gov.configure(True)
         self.update(gpu=59.9)

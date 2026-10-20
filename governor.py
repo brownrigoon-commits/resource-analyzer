@@ -32,6 +32,10 @@ ADAPTERS = (
      'devices': ['cuda'], 'default_device': 'cuda', 'cpu_verified': False},
     {'stage': 'audio-preprocess', 'label': '음성 전처리',
      'devices': ['cpu'], 'default_device': 'cpu', 'cpu_verified': True},
+    {'stage': 'qwen-vision', 'label': 'Qwen 화면 분석',
+     'devices': ['cpu', 'cuda', 'hybrid'], 'default_device': 'cuda', 'cpu_verified': True},
+    {'stage': 'qwen-summary', 'label': 'Qwen 결과 요약',
+     'devices': ['cpu', 'cuda'], 'default_device': 'cuda', 'cpu_verified': True},
 )
 _ADAPTERS = {entry['stage']: entry for entry in ADAPTERS}
 _COUNTERS = ('cpu_selected', 'completed', 'cpu_completed', 'deferred')
@@ -330,7 +334,8 @@ class Governor:
 
     def _grant(self, lease):
         return {'decision': lease['device'], 'reason': '중앙 정책이 다음 작업을 허용했습니다.',
-                'retry_after_s': 0, 'threads': self._threads(), 'lease_id': lease['lease_id']}
+                'retry_after_s': 0, 'threads': self._threads(), 'lease_id': lease['lease_id'],
+                'gpu_layers': 8 if lease['device'] == 'hybrid' else 0 if lease['device'] == 'cpu' else -1}
 
     def _existing_decision(self, lease):
         reason = self._guard()
@@ -369,7 +374,11 @@ class Governor:
                 return self._wait(reason)
             adapter = _ADAPTERS[identity['stage']]
             device = adapter['default_device']
-            if self._enabled and self._pressure:
+            if self._enabled and identity['stage'] == 'qwen-summary':
+                device = 'cpu'
+            elif self._enabled and identity['stage'] == 'qwen-vision' and not self._pressure:
+                device = 'hybrid'
+            elif self._enabled and self._pressure:
                 if 'cpu' not in adapter['devices']:
                     return self._wait('GPU 사용률이 60% 이상이며 이 단계는 CPU 분배를 지원하지 않습니다.')
                 device = 'cpu'
@@ -380,7 +389,7 @@ class Governor:
             lease = {**identity, 'lease_id': secrets.token_urlsafe(32), 'device': device,
                      'acquired_at': now, 'last_seen_at': now}
             stats = dict(self._stats)
-            if device == 'cpu':
+            if device in ('cpu', 'hybrid'):
                 stats['cpu_selected'] += 1
             if not self._save(active=lease, stats=stats):
                 return self._wait(self._journal_error)
@@ -419,7 +428,7 @@ class Governor:
                                      and _ADAPTERS[self._active['stage']]['default_device'] == 'cuda')
             if completed:
                 stats['completed'] += 1
-                if self._active['device'] == 'cpu':
+                if self._active['device'] in ('cpu', 'hybrid'):
                     stats['cpu_completed'] += 1
             if not self._save(active=None, last_release=identity, stats=stats):
                 return {**self._wait(self._journal_error), 'released': False}

@@ -1,5 +1,11 @@
 # 변경 기록
 
+## 0.6.0 — 2026-10-21
+
+- Qwen 화면 분석과 요약에 CPU·GPU 혼합/CPU 전용 배정 단계를 등록했습니다.
+- 켜짐 상태에서 혼합 화면 분석과 CPU 요약을 선택하며 기존 RAM·CPU 보호 기준을 유지합니다.
+- 혼합 배정 표시와 CPU 참여 횟수를 추가했습니다. [연동·검증 범위](docs/qwen-governor.md)를 참고하세요.
+
 ## 0.5.2 — 2026-10-20
 
 - LibreHardwareMonitor의 AMD·Intel·NVIDIA GPU 온도 수집을 활성화했습니다.

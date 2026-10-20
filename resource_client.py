@@ -21,7 +21,8 @@ import uuid
 
 
 _DEVICES = {'whisper-asr': {'cpu', 'cuda'}, 'cosyvoice-synthesis': {'cuda'},
-            'audio-preprocess': {'cpu'}}
+            'audio-preprocess': {'cpu'}, 'qwen-vision': {'cpu', 'cuda', 'hybrid'},
+            'qwen-summary': {'cpu', 'cuda'}}
 _RESPONSE_LIMIT = 64 * 1024
 
 
