@@ -59,6 +59,12 @@ class OnboardingTests(unittest.TestCase):
                 self.assertIn("script-src 'self'", policy)
         self.assertFalse(self.monitor.collecting)
 
+    def test_script_mime_does_not_depend_on_windows_file_associations(self):
+        with patch('mimetypes.guess_type', return_value=('text/plain', None)):
+            for path in ('/welcome.js', '/speedtest.mjs', '/vendor/cloudflare-speedtest-1.14.2.mjs'):
+                with self.request(path) as response:
+                    self.assertEqual(response.headers.get_content_type(), 'text/javascript')
+
     def test_start_is_authorized_and_idempotent(self):
         with patch.object(Monitor, 'run', lambda monitor: monitor.recording_stop.wait()):
             token = self.monitor.csrf_token

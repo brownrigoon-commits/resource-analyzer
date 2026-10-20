@@ -6,7 +6,6 @@ import csv
 from datetime import datetime
 import io
 import json
-import mimetypes
 import os
 import secrets
 import sys
@@ -278,7 +277,10 @@ def make_handler(monitor, port):
                 if not name or not (STATIC / name).is_file():
                     self.send(b'Not found', 'text/plain', 404)
                     return
-                mime = mimetypes.guess_type(name)[0] or 'application/octet-stream'
+                # Windows registry associations differ across PCs. ES modules
+                # require a JavaScript MIME type when nosniff is enabled.
+                mime = {'.html': 'text/html', '.css': 'text/css',
+                        '.js': 'text/javascript', '.mjs': 'text/javascript'}[Path(name).suffix]
                 self.send((STATIC / name).read_bytes(), mime + '; charset=utf-8')
 
         def do_POST(self):
