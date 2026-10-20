@@ -23,6 +23,8 @@ try {
         Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $InstallersDestination $_.Name) -Force
     }
     $Executable = Join-Path $PSScriptRoot 'dist\ResourceAnalyzer.exe'
+    Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'tools\Update-ResourceAnalyzer.ps1') -Destination (Join-Path $PSScriptRoot 'dist\Update-ResourceAnalyzer.ps1') -Force
+    Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'tools\Update-ResourceAnalyzer.cmd') -Destination (Join-Path $PSScriptRoot 'dist\Update-ResourceAnalyzer.cmd') -Force
     $Hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $Executable).Hash.ToLowerInvariant()
     "$Hash  ResourceAnalyzer.exe" | Set-Content (Join-Path $PSScriptRoot 'dist\SHA256SUMS.txt') -Encoding ascii
     $SourceCommit = & git rev-parse HEAD

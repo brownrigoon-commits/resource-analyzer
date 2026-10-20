@@ -55,7 +55,7 @@ def main():
         if not executable.is_file():
             raise RuntimeError('Package folder must contain ResourceAnalyzer.exe')
         for source in sorted(package.rglob('*')):
-            if source.is_file() and source.suffix.lower() in EXTENSIONS:
+            if source.is_file() and (source.suffix.lower() in EXTENSIONS or source.name in ('Update-ResourceAnalyzer.ps1', 'Update-ResourceAnalyzer.cmd')):
                 if source.is_symlink() or not source.resolve().is_relative_to(package):
                     raise RuntimeError('Package artifact points outside its folder')
                 candidates.append((source, Path('installables/ResourceAnalyzer-build') / source.relative_to(package)))
