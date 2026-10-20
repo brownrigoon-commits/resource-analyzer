@@ -64,7 +64,7 @@ NVIDIA GPU는 해당 PC에 맞는 NVIDIA 드라이버가 필요하다. 이 절�
 ## 검증
 
 ```powershell
-.\.venv\Scripts\python.exe -m unittest test_onboarding test_governor_http test_monitor test_system_metrics test_temperatures
+.\.venv\Scripts\python.exe -m unittest test_onboarding test_governor_http test_monitor test_system_metrics test_temperatures test_gpu_windows
 node --test test_speedtest.mjs
 # 전체 Python 검사 (아래 알려진 실패 참고)
 .\.venv\Scripts\python.exe -m unittest discover
@@ -77,13 +77,28 @@ GitHub Actions는 Windows에서 위의 명시된 Python 검사, JavaScript 검�
 
 ## 현재 인계 상태 (2026-10-20)
 
-- 앱 버전: 0.5.0. CPU/GPU/RAM/디스크 모델·온도·상태 색상, 네트워크 연결 종류/실시간 사용량,
+- 앱 버전: 0.5.1. CPU/GPU/RAM/디스크 모델·온도·상태 색상, 네트워크 연결 종류/실시간 사용량,
   버튼으로 실행하는 다운로드·업로드 속도 테스트 구현 완료.
 - 안정 분배는 사용자가 켤 때만 작동한다. 속도 테스트 결과나 사용량만으로 가입 회선 상품을 단정하지 않는다.
-- 이번 작업: clone 후 누락되던 센서 준비를 setup/build에 연결하고, 저장·복원·인계 절차를 저장소에 포함했다.
-- 검증: 별도 GitHub clone + 새 가상환경에서 센서 다운로드/해시 확인·Windows 실행 파일 빌드 성공.
-  Python 31개·JavaScript 5개 검사를 기준으로 확인한다. 자동 Windows 환경에서 발견한 JavaScript MIME 형식 차이도 수정했다.
-- 기존 PC의 실행 인스턴스는 이번 정리 작업에서 종료하거나 교체하지 않는다.
+- 이번 작업: NVIDIA 전용 경로만 있어 AMD GPU가 표시되지 않던 문제를 수정했다. DXGI의 LUID로
+  Windows GPU Engine/Adapter Memory 카운터를 연결하며, AMD·Intel·기타 하드웨어 공급업체에도
+  같은 수집 경로를 사용한다. NVIDIA NVML/SMI는 계속 우선한다.
+- Windows GPU 사용률은 엔진별 프로세스 기여도를 합한 뒤 장치에서 가장 높은 엔진을 선택한다.
+  중복 인스턴스는 중복 합산하지 않으며 PID 0은 장치 집계에만 포함한다. 카운터 실패·워밍업 시
+  이전 값이나 가짜 0%를 표시하지 않는다. 전용 메모리와 공유 RAM은 구분한다.
+- Windows DXGI/PDH는 GPU 온도를 제공하지 않는다. 안정 분배의 CUDA 작업 보호는 기존 NVIDIA
+  공급원 제한을 유지하며, AMD/Intel 사용량 표시가 CUDA 작업 지원을 뜻하지 않는다.
+- 이전 환경 준비 검증: 별도 GitHub clone + 새 가상환경에서 센서 다운로드/해시 확인·Windows 실행 파일 빌드 성공.
+  이번 GPU 수정 후 명시된 Python 50개·JavaScript 5개 검사가 통과했다.
+- `test_gpu_windows.py`는 제조사·LUID 분리, 중복 엔진, PID 0, 메모리 집계, 미측정·실패·워밍업,
+  NVIDIA/AMD 혼합 구성, 불완전한 NVIDIA 열거, 유효한 Windows 대체값이 없을 때 native 값 보존을 검사한다.
+- 이번 GPU 수정은 실제 AMD 외장·내장 GPU가 함께 있는 Windows PC에서 API와 Chrome 화면으로 확인했다.
+  개인 측정값과 장치 식별자·프로그램 목록은 Git에 저장하지 않는다.
+- Windows 실행 파일의 초기 빌드는 성공했고, 최종 소스로 다시 패키징·독립 실행 검증을 진행한다.
+  실행 중인 SensorBridge는 Windows 파일 잠금 때문에 제자리에서 재컴파일할 수 없다.
+- 추가 확인 요청: CPU/DIMM의 PawnIO 미설치 상태와 AMD GPU 온도 수집 경로를 조사 중이다.
+- 이 PC에는 E드라이브가 연결되어 있지 않아 E 설치 파일 백업은 수행할 수 없다.
+  실행 파일은 작업 출력 폴더에 보관하고, E가 연결된 PC에서 위 백업 절차를 이어간다.
 - 인터넷 500Mbps/1Gbps **가입 상품**은 아직 확인되지 않았다. 공유기 로그인은 통신사 가입상품 로그인과 다르다.
 - 다음 작업 시작 시 `git log -5 --oneline`, `git status`, 원격 main을 확인하고 이 문서를 갱신한다.
   정확한 소스 버전은 Git 커밋과 E manifest의 `source_commit`을 기준으로 한다.

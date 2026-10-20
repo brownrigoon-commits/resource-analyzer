@@ -2,7 +2,8 @@
 
 PDH engine data measures the interval between calls. NVML device utilization uses
 the driver's own recent sampling window, so those two percentages need not agree.
-GPU indexes below are NVIDIA enumeration indexes, not Windows Task Manager indexes.
+NVIDIA GPU indexes are NVIDIA enumeration indexes, not Task Manager indexes.
+Windows adapters use DXGI LUID identities and support every WDDM GPU vendor.
 The engine keys retain Windows adapter LUID + physical adapter + engine identity.
 """
 
@@ -15,21 +16,17 @@ import io
 import math
 import os
 from pathlib import Path
-import re
 import shutil
 import subprocess
 import threading
 import time
 
+from windows_gpu import aggregate_engines, aggregate_memory, enumerate_adapters
+
 
 _GIB = 1024 ** 3
 _PDH_MORE_DATA = 0x800007D2
 _PDH_FMT_DOUBLE = 0x00000200
-_ENGINE_RE = re.compile(
-    r"^pid_(?P<pid>\d+)_luid_(?P<luid>0x[0-9a-f]+_0x[0-9a-f]+)"
-    r"_phys_(?P<phys>\d+)_eng_(?P<eng>\d+)_engtype_(?P<type>.+?)(?:#\d+)?$",
-    re.IGNORECASE,
-)
 
 
 class _PdhValueUnion(ct.Union):
@@ -87,9 +84,16 @@ class GpuSampler:
         self._closed = False
         self._query = ct.c_void_p()
         self._counter = ct.c_void_p()
+        self._memory_counter = ct.c_void_p()
+        self._shared_counter = ct.c_void_p()
         self._pdh = None
         self._pdh_error = None
+        self._counter_errors = {}
         self._pdh_last_collect = None
+        self._pdh_collected = False
+        self._windows_utilization = {}
+        self._windows_adapters = []
+        self._windows_errors = []
         self._nvml = None
         self._nvml_devices = []
         self._nvml_error = None
@@ -100,6 +104,7 @@ class GpuSampler:
             return
         self._init_pdh()
         self._init_nvml()
+        self._windows_adapters, self._windows_errors = enumerate_adapters()
         system_smi = Path(os.environ.get("SystemRoot", r"C:\Windows")) / "System32" / "nvidia-smi.exe"
         self._smi = str(system_smi) if system_smi.is_file() else shutil.which("nvidia-smi")
 
@@ -121,11 +126,17 @@ class GpuSampler:
             rc = pdh.PdhOpenQueryW(None, 0, ct.byref(self._query))
             if rc:
                 raise RuntimeError(f"PdhOpenQueryW: 0x{rc:08X}")
-            rc = pdh.PdhAddEnglishCounterW(
-                self._query, r"\GPU Engine(*)\Utilization Percentage", 0,
-                ct.byref(self._counter))
-            if rc:
-                raise RuntimeError(f"PdhAddEnglishCounterW: 0x{rc:08X}")
+            for name, path, counter in (
+                ("engine", r"\GPU Engine(*)\Utilization Percentage", self._counter),
+                ("dedicated memory", r"\GPU Adapter Memory(*)\Dedicated Usage", self._memory_counter),
+                ("shared memory", r"\GPU Adapter Memory(*)\Shared Usage", self._shared_counter),
+            ):
+                rc = pdh.PdhAddEnglishCounterW(self._query, path, 0, ct.byref(counter))
+                if rc:
+                    self._counter_errors[name] = f"GPU {name} counter unavailable: 0x{rc:08X}"
+                    counter.value = None
+            if not any((self._counter, self._memory_counter, self._shared_counter)):
+                raise RuntimeError("No GPU performance counters are available.")
             rc = pdh.PdhCollectQueryData(self._query)
             if rc:
                 # Some driver versions have no current instances. Retry on sample.
@@ -193,7 +204,49 @@ class GpuSampler:
             if dll is not None and initialized:
                 dll.nvmlShutdown()
 
+    def _read_counter(self, counter, label):
+        if not counter:
+            return [], False, [self._counter_errors.get(label, f"GPU {label} counter unavailable.")]
+        # Query twice per the documented buffer-size contract; retry at most once
+        # if process churn increased the required array size between these calls.
+        for _ in range(2):
+            size, count = ct.c_uint32(), ct.c_uint32()
+            rc = self._pdh.PdhGetFormattedCounterArrayW(
+                counter, _PDH_FMT_DOUBLE, ct.byref(size), ct.byref(count), None)
+            if rc == 0 and count.value == 0:
+                return [], True, []
+            if rc != _PDH_MORE_DATA:
+                return [], False, [f"GPU {label} array unavailable: 0x{rc:08X}"]
+            if not 0 < size.value <= 32 * 1024 * 1024:
+                return [], False, [f"GPU {label} array exceeds the safe buffer limit."]
+            allocated_size = size.value
+            buffer = ct.create_string_buffer(allocated_size)
+            rc = self._pdh.PdhGetFormattedCounterArrayW(
+                counter, _PDH_FMT_DOUBLE, ct.byref(size), ct.byref(count), buffer)
+            if rc == _PDH_MORE_DATA:
+                continue
+            if rc:
+                return [], False, [f"GPU {label} values unavailable: 0x{rc:08X}"]
+            if count.value * ct.sizeof(_PdhItem) > allocated_size:
+                return [], False, [f"GPU {label} array failed its size check."]
+            items = ct.cast(buffer, ct.POINTER(_PdhItem))
+            rows = []
+            for index in range(count.value):
+                item = items[index]
+                if item.FmtValue.CStatus not in (0, 1):
+                    continue
+                value = _number(item.FmtValue.doubleValue)
+                if value is not None:
+                    rows.append((item.szName or "", value))
+            if count.value and not rows:
+                return [], False, [f"GPU {label} counter has no valid samples yet."]
+            return rows, True, []
+        return [], False, [f"GPU {label} instances changed during collection; next sample will retry."]
+
     def _sample_engines(self):
+        # Never reuse utilization or memory after a failed or premature collect.
+        self._windows_utilization = {}
+        self._pdh_collected = False
         if not self._pdh or not self._query:
             return {}, False, [self._pdh_error or "GPU process counters unavailable."]
         now = time.monotonic()
@@ -201,58 +254,52 @@ class GpuSampler:
             return {}, False, ["GPU process counters are warming up; wait for the next sample."]
         rc = self._pdh.PdhCollectQueryData(self._query)
         if rc:
+            # A rate counter needs two successful collections after an error.
+            self._pdh_last_collect = None
             return {}, False, [f"GPU process collection unavailable: 0x{rc:08X}"]
         previous = self._pdh_last_collect
         self._pdh_last_collect = now
+        self._pdh_collected = True
         if previous is None:
             return {}, False, ["GPU process counters are warming up; wait for the next sample."]
-        # Query twice per the documented buffer-size contract; retry at most once
-        # if process churn increased the required array size between these calls.
-        for _ in range(2):
-            size, count = ct.c_uint32(), ct.c_uint32()
-            rc = self._pdh.PdhGetFormattedCounterArrayW(
-                self._counter, _PDH_FMT_DOUBLE, ct.byref(size), ct.byref(count), None)
-            if rc == 0 and count.value == 0:
-                return {}, True, []
-            if rc != _PDH_MORE_DATA:
-                return {}, False, [f"GPU process array unavailable: 0x{rc:08X}"]
-            if not 0 < size.value <= 32 * 1024 * 1024:
-                return {}, False, ["GPU process array exceeds the safe buffer limit."]
-            allocated_size = size.value
-            buffer = ct.create_string_buffer(allocated_size)
-            rc = self._pdh.PdhGetFormattedCounterArrayW(
-                self._counter, _PDH_FMT_DOUBLE, ct.byref(size), ct.byref(count), buffer)
-            if rc == _PDH_MORE_DATA:
-                continue
-            if rc:
-                return {}, False, [f"GPU process values unavailable: 0x{rc:08X}"]
-            if count.value * ct.sizeof(_PdhItem) > allocated_size:
-                return {}, False, ["GPU process array failed its size check."]
-            items = ct.cast(buffer, ct.POINTER(_PdhItem))
-            by_pid = {}
-            for index in range(count.value):
-                item = items[index]
-                if item.FmtValue.CStatus not in (0, 1):
-                    continue
-                match = _ENGINE_RE.match(item.szName or "")
-                pct = _pct(item.FmtValue.doubleValue)
-                if not match or pct is None:
-                    continue
-                pid = int(match["pid"])
-                if pid <= 0:
-                    continue
-                key = f'luid_{match["luid"].lower()}_phys_{match["phys"]}_eng_{match["eng"]}'
-                engines = by_pid.setdefault(pid, {})
-                # Counter duplication is not additional workload; keep one peak.
-                if key not in engines or engines[key]["pct"] < pct:
-                    engines[key] = {"key": key, "name": match["type"], "pct": pct}
-            processes = {}
-            for pid, engines in by_pid.items():
-                values = sorted(engines.values(), key=lambda engine: engine["key"])
-                processes[pid] = {"gpu_pct": max(engine["pct"] for engine in values),
-                                  "engines": values}
-            return processes, True, []
-        return {}, False, ["GPU process instances changed during collection; next sample will retry."]
+        rows, available, errors = self._read_counter(self._counter, "engine")
+        processes, self._windows_utilization = aggregate_engines(rows)
+        return processes, available, errors
+
+    def _sample_windows(self, nvidia_present=False):
+        # NVML/SMI indexes cannot be matched to DXGI by order or product name.
+        # Keep their NVIDIA rows, and independently add every other vendor.
+        adapters = [adapter for adapter in self._windows_adapters
+                    if not nvidia_present or adapter["vendor_id"] != 0x10DE]
+        errors = list(self._windows_errors)
+        if not adapters:
+            return [], errors
+        dedicated, shared = {}, {}
+        if self._pdh_collected:
+            rows, _, counter_errors = self._read_counter(self._memory_counter, "dedicated memory")
+            dedicated = aggregate_memory(rows)
+            errors.extend(counter_errors)
+            rows, _, counter_errors = self._read_counter(self._shared_counter, "shared memory")
+            shared = aggregate_memory(rows)
+            errors.extend(counter_errors)
+        gpus = []
+        for adapter in adapters:
+            luid = adapter["adapter_luid"]
+            used = dedicated.get(luid)
+            total = adapter["dedicated_bytes"]
+            shared_used = shared.get(luid)
+            gpus.append({
+                "id": adapter["id"], "name": adapter["name"],
+                "adapter_luid": luid, "vendor_id": adapter["vendor_id"],
+                "util_pct": self._windows_utilization.get(luid),
+                "vram_used_gb": round(used / _GIB, 4) if used is not None else None,
+                "vram_total_gb": round(total / _GIB, 4),
+                "vram_pct": _pct(used * 100 / total) if used is not None and total else None,
+                "shared_used_gb": round(shared_used / _GIB, 4) if shared_used is not None else None,
+                "shared_total_gb": round(adapter["shared_bytes"] / _GIB, 4),
+                "temp_c": None, "source": "Windows DXGI/PDH",
+            })
+        return gpus, errors
 
     def _sample_nvml(self):
         gpus, errors = [], []
@@ -310,7 +357,35 @@ class GpuSampler:
                 gpus, device_errors = self._sample_nvml()
             else:
                 gpus, device_errors = self._sample_smi()
-            errors.extend(device_errors)
+            windows_gpus, windows_errors = self._sample_windows()
+            windows_nvidia = [gpu for gpu in windows_gpus if gpu["vendor_id"] == 0x10DE]
+            windows_nvidia_count = len(windows_nvidia)
+            windows_metrics_complete = bool(windows_nvidia) and all(
+                gpu.get("util_pct") is not None and gpu.get("vram_used_gb") is not None
+                for gpu in windows_nvidia)
+            native_metrics_missing = any(gpu.get("util_pct") is None
+                                         or gpu.get("vram_used_gb") is None for gpu in gpus)
+            if gpus and (windows_nvidia_count > len(gpus)
+                         or (windows_nvidia_count == len(gpus) and native_metrics_missing
+                             and windows_metrics_complete)):
+                # Partial NVML coverage must not hide valid Windows telemetry.
+                # Select the complete Windows list, without guessing which native
+                # index belongs to which LUID. Extra TCC-only NVML devices remain
+                # supported when Windows enumerates fewer devices than NVML. An
+                # equal-size metric fallback must have valid replacement values
+                # for every card, so PDH warmup/failure never discards native data.
+                reason = ("NVIDIA device telemetry was incomplete; using Windows GPU counters."
+                          if windows_metrics_complete else
+                          "NVIDIA enumeration was incomplete; using Windows device inventory.")
+                gpus = []
+                errors.append(reason)
+            elif gpus:
+                windows_gpus = [gpu for gpu in windows_gpus if gpu["vendor_id"] != 0x10DE]
+            # Missing NVIDIA libraries are irrelevant on an AMD/Intel-only PC.
+            if gpus or not windows_gpus:
+                errors.extend(device_errors)
+            gpus.extend(windows_gpus)
+            errors.extend(windows_errors)
             # Fixed-size per-sample diagnostics only; no accumulating error log.
             return {"gpus": gpus, "processes": processes,
                     "errors": list(dict.fromkeys(errors))[:12],
@@ -327,6 +402,8 @@ class GpuSampler:
                 self._pdh.PdhCloseQuery(self._query)
                 self._query = ct.c_void_p()
                 self._counter = ct.c_void_p()
+                self._memory_counter = ct.c_void_p()
+                self._shared_counter = ct.c_void_p()
             if self._nvml is not None:
                 self._nvml.nvmlShutdown()
                 self._nvml = None

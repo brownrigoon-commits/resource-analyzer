@@ -46,8 +46,8 @@
     const cpuName=(sys.cpu_name||"CPU 정보 확인 중").replace(/\s+\d+-Core Processor/i,"").trim();
     $("cpu-model").textContent=cpuName;$("cpu-model").title=sys.cpu_name||"";
     $("cpu-spec").textContent=[finite(sys.cpu_cores)?`${sys.cpu_cores}코어`:null,finite(sys.cpu_threads)?`${sys.cpu_threads}스레드`:null].filter(Boolean).join(" · ");
-    $("gpu-model").textContent=gpu?.name?.replace(/^NVIDIA\s+/,"")||"GPU 정보 확인 중";$("gpu-model").title=gpu?.name||"";
-    $("gpu-spec").textContent=finite(gpu?.vram_total_gb)?`전용 메모리 ${number(gpu.vram_total_gb,0)} GB`:"전용 메모리 미측정";
+    $("gpu-model").textContent=gpu?.name?.replace(/^NVIDIA\s+/,"")||"GPU 정보 미측정";$("gpu-model").title=rows(sys.gpus).map(g=>g.name).filter(Boolean).join("\n");
+    $("gpu-spec").textContent=finite(gpu?.vram_total_gb)?`전용 메모리 ${memory(gpu.vram_total_gb)}`:"전용 메모리 미측정";
     const types={24:"DDR3",26:"DDR4",34:"DDR5",30:"LPDDR4",35:"LPDDR5"},memoryTypes=[...new Set(modules.map(m=>types[m.type]).filter(Boolean))];
     const installed=modules.length?modules.reduce((total,m)=>total+(finite(m.capacity)?m.capacity:0),0)/1024**3:null;
     $("ram-model").textContent=[memoryTypes.join(" / "),finite(installed)&&installed>0?`${number(installed,0)} GB`:finite(sys.ram_total_gb)?`${number(sys.ram_total_gb)} GiB`:"정보 확인 중"].filter(Boolean).join(" · ");
@@ -76,7 +76,7 @@
   }
   function renderTemperatures(sys={},gpu=null,stale=false){
     const temperatures=sys.temperatures||{};
-    const sensors={cpu:temperatures.cpu,ram:temperatures.ram,disk:temperatures.disk,gpu:{temp_c:gpu?.temp_c,details:gpu?`${gpu.name||"GPU"} · 장치 온도`:"GPU 온도 센서를 확인할 수 없습니다."}};
+    const sensors={cpu:temperatures.cpu,ram:temperatures.ram,disk:temperatures.disk,gpu:{temp_c:gpu?.temp_c,details:finite(gpu?.temp_c)?`${gpu.name||"GPU"} · 장치 온도`:"이 장치에서 읽을 수 있는 GPU 온도 센서가 없습니다."}};
     const names={cpu:"CPU",gpu:"GPU",ram:"메모리",disk:"디스크"};
     Object.entries(sensors).forEach(([key,sensor])=>{
       const el=$(`${key}-temperature`),measured=!stale&&finite(sensor?.temp_c);
@@ -108,7 +108,7 @@
     const s=state.snapshot,sys=s.system||{},gpus=rows(sys.gpus),gpu=peakGpu(gpus);
     $("live-status").className=s.stale?"live-status waiting":"live-status";$("live-status").innerHTML=s.stale?"<i></i>측정 지연":"<i></i>실시간 수집 중";$("last-update").textContent=`${time(s.ts,true)} 업데이트`;
     $("cpu-value").textContent=number(sys.cpu_pct);$("cpu-context").textContent=finite(sys.cpu_threads)?`${sys.cpu_threads}개 논리 프로세서`:"전체 처리 용량";$("cpu-detail").textContent=finite(sys.cpu_peak_core_pct)?`가장 바쁜 논리 프로세서 ${percent(sys.cpu_peak_core_pct)}`:"PC 전체 처리 용량 기준";
-    $("gpu-value").textContent=number(gpu?.util_pct);$("gpu-context").textContent=gpu?gpu.name:"미측정";$("gpu-context").title=gpu?.name||"";$("gpu-detail").textContent=gpu?`VRAM ${number(gpu.vram_used_gb)} / ${number(gpu.vram_total_gb)} GiB`:"GPU 사용률을 아직 읽지 못했습니다";
+    $("gpu-value").textContent=number(gpu?.util_pct);$("gpu-context").textContent=gpus.length>1?`${gpus.length}개 중 높은 사용률`:gpu?"장치 사용률":"미측정";$("gpu-context").title=gpu?.name||"";$("gpu-detail").textContent=gpu?`전용 ${memory(gpu.vram_used_gb)} / ${memory(gpu.vram_total_gb)}`:"Windows에서 GPU 정보를 읽지 못했습니다";$("gpu-detail").title=gpu?`${gpu.name} · ${gpu.source||"출처 미확인"} · ${finite(gpu.util_pct)?"사용률 측정 중":"사용률 미측정"}`:"GPU 정보 미측정";
     $("ram-value").textContent=number(sys.ram_pct);$("ram-detail").textContent=`${number(sys.ram_used_gb)} / ${number(sys.ram_total_gb)} GiB · 여유 ${number(sys.ram_available_gb)} GiB`;
     $("disk-value").textContent=number(sum(sys.disk_read_mbps,sys.disk_write_mbps),1);$("disk-detail").textContent=`활동 ${percent(sys.disk_busy_pct)} · 읽기 ${number(sys.disk_read_mbps,1)} · 쓰기 ${number(sys.disk_write_mbps,1)} MiB/s`;$("disk-detail").title=$("disk-detail").textContent;
     renderTemperatures(sys,gpu,s.stale===true);
@@ -129,7 +129,7 @@
   }
   function renderDevices(){
     const sys=state.snapshot?.system||{};
-    $("gpu-devices").innerHTML=rows(sys.gpus).length?rows(sys.gpus).map(g=>`<div class="gpu-device"><div class="device-name">${safe(g.name||"GPU")}</div><div class="device-line"><span>전용 메모리</span><strong>${number(g.vram_used_gb)} / ${number(g.vram_total_gb)} GiB</strong></div><div class="capacity-bar ${g.vram_pct>90?"warning":""}"><i style="width:${clamp(g.vram_pct)}%"></i></div><div class="device-line"><span>연산 ${percent(g.util_pct)}${finite(g.temp_c)?` · ${number(g.temp_c,0)}°C`:""}</span><span title="측정 출처: ${safe(g.source||"미확인")}">장치 전체</span></div></div>`).join(""):"<p class='subtle'>GPU 정보 미측정 · CPU·메모리 기록은 계속됩니다.</p>";
+    $("gpu-devices").innerHTML=rows(sys.gpus).length?rows(sys.gpus).map(g=>`<div class="gpu-device"><div class="device-name">${safe(g.name||"GPU")}</div><div class="device-line"><span>전용 메모리</span><strong>${memory(g.vram_used_gb)} / ${memory(g.vram_total_gb)}</strong></div><div class="capacity-bar ${g.vram_pct>90?"warning":""}"><i style="width:${clamp(g.vram_pct)}%"></i></div>${finite(g.shared_used_gb)||finite(g.shared_total_gb)?`<div class="device-line"><span>공유 메모리</span><strong>${memory(g.shared_used_gb)} / ${memory(g.shared_total_gb)}</strong></div>`:""}<div class="device-line"><span>사용률 ${percent(g.util_pct)}${finite(g.temp_c)?` · ${number(g.temp_c,0)}°C`:""}</span><span title="측정 출처: ${safe(g.source||"미확인")}">${String(g.source||"").includes("PDH")?"최고 부하 엔진":"장치 전체"}</span></div></div>`).join(""):"<p class='subtle'>GPU 정보 미측정 · CPU·메모리 기록은 계속됩니다.</p>";
     $("disk-devices").innerHTML=rows(sys.disks).map(d=>`<div class="disk-item"><div class="device-name">${safe(d.drive)} <span class="device-label">${safe(d.label||"")}</span></div><div class="device-line"><span>사용 ${percent(d.used_pct)}</span></div><div class="capacity-bar ${d.used_pct>90?"warning":""}"><i style="width:${clamp(d.used_pct)}%"></i></div><div class="device-line"><span>${number(d.free_gb,0)} / ${number(d.total_gb,0)} GiB 여유</span></div></div>`).join("")||"<p class='subtle'>저장 공간 미측정</p>";
   }
   function renderVoice(){
