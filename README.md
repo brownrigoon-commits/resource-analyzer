@@ -4,6 +4,9 @@ Windows PC의 CPU·메모리·디스크·GPU 사용량을 프로그램별로 확
 
 ## 사용하기
 
+PC 설치·배포 파일은 GitHub 코드와 별도로 E드라이브에도 버전별로 보관합니다.
+백업·검증 명령과 복원 범위는 [PC 설치 파일 백업 절차](docs/pc-install-backups.md)를 참고하세요.
+
 1. [GitHub Releases](https://github.com/brownrigoon-commits/resource-analyzer/releases)에서 Windows용 `ResourceAnalyzer.exe`를 다운로드합니다.
 2. 앱을 실행하면 Chrome 등 기본 브라우저에서 시작 화면이 열립니다.
 3. **내 컴퓨터 분석하기**를 누르면 분석 화면이 열립니다.
