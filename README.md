@@ -109,13 +109,17 @@ MIT 라이선스는 `third_party/Cloudflare-Speedtest-LICENSE.txt`에 포함되�
 
 ## 온도 센서 엔진
 
-CPU·GPU·메모리·디스크 카드 안에 작은 온도를 표시합니다. GPU는 기존 NVIDIA 측정값,
-나머지 부품은 함께 제공되는 Libre Hardware Monitor 0.9.6 센서 엔진을 사용합니다.
+CPU·GPU·메모리·디스크 카드 안에 작은 온도를 표시합니다. GPU는 NVIDIA 측정값과
+LibreHardwareMonitor 0.9.6의 AMD·Intel·NVIDIA 센서를 사용합니다. 나머지 부품도 같은 센서 엔진을 사용합니다.
 여러 센서가 읽히면 그 부품의 최고 측정 온도를 표시하며, 마우스를 올리면 개별 센서를 확인할 수 있습니다.
+GPU 온도는 측정 가능한 모든 GPU 센서 중 최고값이며, 사용률이 가장 높은 장치와 다를 수 있습니다.
+**GPU 온도 센서** 목록에 실제 센서가 보고한 장치명과 온도를 따로 표시합니다.
+이름이나 나열 순서로 온도를 다른 GPU에 붙이지 않습니다.
 DIMM 온도에는 실제 센서값만 사용하고 경고 임계값·센서 해상도는 제외합니다.
 
 CPU와 DIMM 접근에는 공식 PawnIO 드라이버와 센서 프로세스의 관리자 승인이 필요합니다.
-드라이버를 처음 설치할 때는 `ResourceAnalyzer.exe --install-temperature-support`를 실행하고,
+드라이버를 처음 설치할 때는 함께 제공되는 `installers/PawnIO_setup.exe`를 실행하거나
+`ResourceAnalyzer.exe --install-temperature-support`를 실행하고,
 설치가 끝나면 분석기를 다시 시작합니다. 온도 프로세스만 관리자 권한으로 실행하며
 웹 서버는 기존 권한과 로컬 주소를 사용합니다. 센서 엔진은 팬 속도·전압·클럭 설정을 변경하지 않습니다.
 

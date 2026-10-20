@@ -1,0 +1,64 @@
+{
+  "product": "PawnIO",
+  "version": "2.1.0",
+  "installer_file_version": "2.1.0.0",
+  "release_url": "https://github.com/namazso/PawnIO.Setup/releases/tag/2.1.0",
+  "pinned_by": "LibreHardwareMonitor 0.9.6",
+  "installer_mirror_url": "https://raw.githubusercontent.com/LibreHardwareMonitor/LibreHardwareMonitor/v0.9.6/LibreHardwareMonitor/Resources/PawnIO_setup.exe",
+  "installer_unmodified": true,
+  "authenticode_verification": {
+    "status": "Valid",
+    "subject": "E=admin@namazso.eu, CN=namazso.eu, O=namazso, L=Debrecen, C=HU",
+    "checked_on": "2026-10-20T17:14:35+09:00"
+  },
+  "licenses": {
+    "installer": "Unmodified redistribution permitted by embedded notice",
+    "driver": "GPL-2.0-or-later with the exception in PawnIO-LICENSE-NOTICE.txt",
+    "PawnPP": "MPL-2.0"
+  },
+  "source_layout": "Extract the contents of the PawnPP archive root into the PawnIO source root/PawnPP directory.",
+  "files": [
+    {
+      "file": "PawnIO_setup.exe",
+      "source_url": "https://github.com/namazso/PawnIO.Setup/releases/download/2.1.0/PawnIO_setup.exe",
+      "source_commit": null,
+      "bytes": 3225016,
+      "sha256": "a3a46226c5e2824f4cdd42be0eecbabfc672c86f7889710f5ab1e6ad385b47a0"
+    },
+    {
+      "file": "PawnIO-2.1.0-source.zip",
+      "source_url": "https://codeload.github.com/namazso/PawnIO/zip/e1043d7750f501b6b0d3ac0a71bd5b9406cd17b6",
+      "source_commit": "e1043d7750f501b6b0d3ac0a71bd5b9406cd17b6",
+      "bytes": 81019,
+      "sha256": "ed04fc2b5fe3b49f4c0e6cfe3857fbcaaa14611e936e1fad8c207a91118ac074"
+    },
+    {
+      "file": "PawnPP-e64e4c3-source.zip",
+      "source_url": "https://codeload.github.com/namazso/PawnPP/zip/e64e4c37b2d8ba0d8ee57205faf8183aee12c438",
+      "source_commit": "e64e4c37b2d8ba0d8ee57205faf8183aee12c438",
+      "bytes": 35340,
+      "sha256": "20aa0638b95c90d296935310f3f28cc22de1fb24855c5baa6721e2ae95eb6042"
+    },
+    {
+      "file": "PawnIO-COPYING.txt",
+      "source_url": "https://raw.githubusercontent.com/namazso/PawnIO/e1043d7750f501b6b0d3ac0a71bd5b9406cd17b6/COPYING",
+      "source_commit": "e1043d7750f501b6b0d3ac0a71bd5b9406cd17b6",
+      "bytes": 18092,
+      "sha256": "8177f97513213526df2cf6184d8ff986c675afb514d4e68a404010521b880643"
+    },
+    {
+      "file": "PawnIO-LICENSE-NOTICE.txt",
+      "source_url": "https://raw.githubusercontent.com/namazso/PawnIO/e1043d7750f501b6b0d3ac0a71bd5b9406cd17b6/README.md",
+      "source_commit": "e1043d7750f501b6b0d3ac0a71bd5b9406cd17b6",
+      "bytes": 2556,
+      "sha256": "80ff9b48b780c0d4d116c93707974e960a577d5b71a76a17cafe05b0b2f143c8"
+    },
+    {
+      "file": "PawnPP-LICENSE.txt",
+      "source_url": "https://raw.githubusercontent.com/namazso/PawnPP/e64e4c37b2d8ba0d8ee57205faf8183aee12c438/LICENSE",
+      "source_commit": "e64e4c37b2d8ba0d8ee57205faf8183aee12c438",
+      "bytes": 16725,
+      "sha256": "1f256ecad192880510e84ad60474eab7589218784b9a50bc7ceee34c2b91f1d5"
+    }
+  ]
+}

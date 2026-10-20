@@ -20,6 +20,12 @@ $Requirements = if ($Build) { 'requirements-build.txt' } else { 'requirements.tx
 if ($LASTEXITCODE -ne 0) { throw 'Dependency installation failed.' }
 $SensorArgs = @()
 if ($SensorArchive) { $SensorArgs += @('--archive', $SensorArchive) }
+if (-not $PawnIOInstaller) {
+    $BundledPawnIOInstaller = Join-Path $PSScriptRoot 'installers\PawnIO_setup.exe'
+    if (Test-Path -LiteralPath $BundledPawnIOInstaller -PathType Leaf) {
+        $PawnIOInstaller = $BundledPawnIOInstaller
+    }
+}
 if ($PawnIOInstaller) { $SensorArgs += @('--pawnio-installer', $PawnIOInstaller) }
 & $VenvPython (Join-Path $PSScriptRoot 'tools\build_sensor_bridge.py') @SensorArgs
 if ($LASTEXITCODE -ne 0) { throw 'Sensor package preparation failed.' }

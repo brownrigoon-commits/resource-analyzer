@@ -18,8 +18,24 @@ import uuid
 
 from app_paths import bundle_dir
 
-KINDS = ('cpu', 'ram', 'disk')
+KINDS = ('cpu', 'ram', 'disk', 'gpu')
 MAX_AGE_S = 8
+
+
+def _sensor_error(payload, kind):
+    errors_by_kind = payload.get('errors_by_kind')
+    if isinstance(errors_by_kind, dict):
+        error = errors_by_kind.get(kind)
+    else:
+        # Older bridges have no GPU sensors. Their CPU/DIMM prerequisite error
+        # must not be presented as a missing GPU driver.
+        error = payload.get('error') if kind != 'gpu' else None
+    translations = {
+        'PawnIO is not installed.': 'CPU·메모리 온도용 PawnIO 드라이버가 설치되지 않았습니다.',
+        'Administrator permission is required for CPU and DIMM temperatures.':
+            'CPU·메모리 온도를 읽으려면 센서 엔진의 관리자 승인이 필요합니다.',
+    }
+    return translations.get(error, error) if isinstance(error, str) else None
 
 
 def summarize(payload, now=None):
@@ -33,13 +49,18 @@ def summarize(payload, now=None):
             for sensor in payload.get('sensors', []):
                 value = sensor.get('temp_c')
                 if sensor.get('kind') == kind and isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value) and -20 <= value <= 150:
-                    sensors.append({'name': str(sensor.get('name', kind))[:120], 'temp_c': round(value, 1)})
+                    reading = {'name': str(sensor.get('name', kind))[:120], 'temp_c': round(value, 1)}
+                    for field in ('source', 'hardware_id', 'device_id'):
+                        if isinstance(sensor.get(field), str):
+                            reading[field] = sensor[field][:512]
+                    sensors.append(reading)
         status = 'ok' if sensors else ('stale' if timestamp and not fresh else 'unavailable')
         details = ' · '.join(f"{s['name']}: {s['temp_c']:g}°C" for s in sensors)
         if len(sensors) > 1:
             details = '읽을 수 있는 센서 중 최고 온도 · ' + details
         if not sensors:
-            details = payload.get('error') or ('온도 수신이 지연되어 이전 값은 표시하지 않습니다.' if status == 'stale' else '이 부품에서 읽을 수 있는 온도 센서가 없습니다.')
+            details = ('온도 수신이 지연되어 이전 값은 표시하지 않습니다.' if status == 'stale'
+                       else _sensor_error(payload, kind) or '이 부품에서 읽을 수 있는 온도 센서가 없습니다.')
         result[kind] = {'temp_c': max((s['temp_c'] for s in sensors), default=None),
                         'status': status, 'details': details, 'sensors': sensors}
     return result

@@ -33,6 +33,10 @@ or proof of sensor availability. The upstream versioned source and separate real
   setpoints and are excluded even though upstream categorizes them as temperatures. The selected probe name
   accompanies each reading so the dashboard tooltip identifies which measurement supplied the maximum.
 - Only temperature readings are serialized. Hardware control setters are not called by the bridge.
+- Version 0.5.2 enables AMD, Intel and NVIDIA GPU sensors. GPU driver APIs do not inherit the
+  CPU/DIMM PawnIO prerequisite gate; diagnostics are separated by hardware category.
+  GPU sensor identifiers are retained independently from DXGI identifiers. The UI shows the highest
+  available GPU sensor temperature and a named sensor list, without guessing adapter matches.
 - Sampling uses the upstream sensor API. Some sensor drivers can retain their last valid value after a hardware
   read fails; a bridge timestamp establishes successful bridge polling, not an independent timestamp per sensor.
 - The elevated bridge emits JSON on a random, current-user-scoped, output-only named pipe. It accepts no commands,
@@ -50,6 +54,15 @@ or proof of sensor availability. The upstream versioned source and separate real
 - https://github.com/namazso/PawnIO.Modules/wiki/Using-PawnIO-Modules#licensing-considerations
 
 ## Validation status
+
+Current PC validation (2026-10-20, version 0.5.2): official PawnIO 2.1.0 installer checksum and
+Authenticode signature verified, installation exit code 0, driver service Running. After restarting
+the monitor, CPU, both DIMMs, integrated AMD GPU and storage temperatures were observed in Chrome.
+The discrete AMD GPU rejected temperature requests through the current AMD ADL path; its temperature
+is not inferred from the integrated GPU. The explicit Python suite passes 53 tests, including
+8 temperature tests. Personal sensor readings and device identifiers are not committed.
+
+Earlier validation, on the previous environment:
 
 - Built the sensor bridge and packaged Windows executable successfully.
 - Checked the live dashboard at 700px: four cards retain their layout and display small temperature badges.

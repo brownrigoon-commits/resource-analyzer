@@ -13,6 +13,15 @@ Push-Location $PSScriptRoot
 try {
     & $VenvPython -m PyInstaller --noconfirm --distpath (Join-Path $PSScriptRoot 'dist') --workpath (Join-Path $PSScriptRoot 'build\pyinstaller') (Join-Path $PSScriptRoot 'ResourceAnalyzer.spec')
     if ($LASTEXITCODE -ne 0) { throw 'Executable build failed.' }
+    $InstallersSource = Join-Path $PSScriptRoot 'installers'
+    $InstallersDestination = Join-Path $PSScriptRoot 'dist\installers'
+    if (-not (Test-Path -LiteralPath (Join-Path $InstallersSource 'PawnIO_setup.exe') -PathType Leaf)) {
+        throw 'The redistributable PawnIO package is missing from installers.'
+    }
+    New-Item -ItemType Directory -Path $InstallersDestination -Force | Out-Null
+    Get-ChildItem -LiteralPath $InstallersSource -File | ForEach-Object {
+        Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $InstallersDestination $_.Name) -Force
+    }
     $Executable = Join-Path $PSScriptRoot 'dist\ResourceAnalyzer.exe'
     $Hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $Executable).Hash.ToLowerInvariant()
     "$Hash  ResourceAnalyzer.exe" | Set-Content (Join-Path $PSScriptRoot 'dist\SHA256SUMS.txt') -Encoding ascii

@@ -11,6 +11,7 @@ using System.Text.RegularExpressions;
 using System.Threading;
 using System.Web.Script.Serialization;
 using LibreHardwareMonitor.Hardware;
+using LibreHardwareMonitor.Hardware.Gpu;
 using LibreHardwareMonitor.PawnIo;
 
 internal static class SensorBridge
@@ -67,7 +68,7 @@ internal static class SensorBridge
             IsStorageEnabled = true,
             IsMotherboardEnabled = false,
             IsControllerEnabled = false,
-            IsGpuEnabled = false,
+            IsGpuEnabled = true,
             IsNetworkEnabled = false,
             IsPsuEnabled = false,
             IsBatteryEnabled = false
@@ -112,15 +113,35 @@ internal static class SensorBridge
             {
                 List<Dictionary<string, object>> sensors = new List<Dictionary<string, object>>();
                 List<string> errors = new List<string>();
-                if (prerequisite != null) errors.Add(prerequisite);
+                Dictionary<string, List<string>> errorsByKind = new Dictionary<string, List<string>>
+                {
+                    { "cpu", new List<string>() }, { "ram", new List<string>() },
+                    { "gpu", new List<string>() }, { "disk", new List<string>() }
+                };
+                if (prerequisite != null)
+                {
+                    AddError("cpu", prerequisite, errors, errorsByKind);
+                    AddError("ram", prerequisite, errors, errorsByKind);
+                }
                 foreach (IHardware hardware in computer.Hardware)
-                    ReadHardware(hardware, lowLevelReady, sensors, errors);
+                    ReadHardware(hardware, lowLevelReady, sensors, errors, errorsByKind);
+                bool hasGpuTemperature = sensors.Exists(delegate(Dictionary<string, object> sensor)
+                {
+                    return (string)sensor["kind"] == "gpu";
+                });
+                if (!hasGpuTemperature && errorsByKind["gpu"].Count == 0)
+                    AddError("gpu", "No supported GPU temperature sensor was exposed by the display driver.",
+                        errors, errorsByKind);
+                Dictionary<string, object> kindErrors = new Dictionary<string, object>();
+                foreach (KeyValuePair<string, List<string>> entry in errorsByKind)
+                    kindErrors[entry.Key] = entry.Value.Count == 0 ? null : String.Join(" ", entry.Value.ToArray());
 
                 Dictionary<string, object> sample = new Dictionary<string, object>
                 {
                     { "sampled_at", (DateTime.UtcNow - new DateTime(1970, 1, 1)).TotalSeconds },
                     { "sensors", sensors },
                     { "error", errors.Count == 0 ? null : String.Join(" ", errors.ToArray()) },
+                    { "errors_by_kind", kindErrors },
                     { "pawnio_installed", pawnInstalled }
                 };
                 string line = Json.Serialize(sample);
@@ -143,16 +164,31 @@ internal static class SensorBridge
         }
     }
 
-    private static void ReadHardware(IHardware hardware, bool lowLevelReady,
-        List<Dictionary<string, object>> output, List<string> errors)
+    private static void AddError(string kind, string message, List<string> errors,
+        Dictionary<string, List<string>> errorsByKind)
     {
+        if (errors.Count < 4 && !errors.Contains(message)) errors.Add(message);
+        List<string> kindErrors;
+        if (kind != null && errorsByKind.TryGetValue(kind, out kindErrors) &&
+            kindErrors.Count < 4 && !kindErrors.Contains(message)) kindErrors.Add(message);
+    }
+
+    private static void ReadHardware(IHardware hardware, bool lowLevelReady,
+        List<Dictionary<string, object>> output, List<string> errors,
+        Dictionary<string, List<string>> errorsByKind)
+    {
+        string kind = hardware.HardwareType == HardwareType.Cpu ? "cpu" :
+            hardware.HardwareType == HardwareType.Memory ? "ram" :
+            hardware.HardwareType == HardwareType.Storage ? "disk" :
+            hardware.HardwareType == HardwareType.GpuAmd ||
+            hardware.HardwareType == HardwareType.GpuNvidia ||
+            hardware.HardwareType == HardwareType.GpuIntel ? "gpu" : null;
         try
         {
             hardware.Update();
-            string kind = hardware.HardwareType == HardwareType.Cpu ? "cpu" :
-                hardware.HardwareType == HardwareType.Memory ? "ram" :
-                hardware.HardwareType == HardwareType.Storage ? "disk" : null;
-            if (kind != null && (kind == "disk" || lowLevelReady))
+            // AMD ADL and NVIDIA/Intel driver sensors do not require the
+            // CPU/DIMM PawnIO prerequisites. Never apply that gate to GPUs.
+            if (kind != null && (kind == "disk" || kind == "gpu" || lowLevelReady))
             {
                 float? maximum = null;
                 string maximumName = null;
@@ -177,19 +213,41 @@ internal static class SensorBridge
                     }
                 }
                 if (maximum.HasValue)
-                    output.Add(new Dictionary<string, object>
+                {
+                    Dictionary<string, object> reading = new Dictionary<string, object>
                     {
                         { "kind", kind }, { "name", hardware.Name + " · " + maximumName },
                         { "temp_c", Math.Round(maximum.Value, 2) },
-                        { "source", "LibreHardwareMonitor" }
-                    });
+                        { "source", "LibreHardwareMonitor" },
+                        { "hardware_id", hardware.Identifier.ToString() }
+                    };
+                    GenericGpu gpu = hardware as GenericGpu;
+                    if (gpu != null)
+                    {
+                        // Preserve the driver's identifier for future exact
+                        // matching; never infer a device from its name/order.
+                        string deviceId = null;
+                        try { deviceId = gpu.DeviceId; }
+                        catch (Exception ex)
+                        {
+                            AddError("gpu", "GPU device identity unavailable for " + hardware.Name +
+                                ": " + ex.GetType().Name + ".", errors, errorsByKind);
+                        }
+                        reading["device_id"] = String.IsNullOrWhiteSpace(deviceId) ? null : deviceId;
+                    }
+                    output.Add(reading);
+                }
+                else if (kind == "gpu")
+                    AddError("gpu", "No supported GPU temperature sensor was reported for " +
+                        hardware.Name + ".", errors, errorsByKind);
             }
         }
         catch (Exception ex)
         {
-            if (errors.Count < 4) errors.Add("Sensor update failed: " + ex.GetType().Name + ".");
+            AddError(kind, "Sensor update failed for " + hardware.Name + ": " +
+                ex.GetType().Name + ".", errors, errorsByKind);
         }
         foreach (IHardware child in hardware.SubHardware)
-            ReadHardware(child, lowLevelReady, output, errors);
+            ReadHardware(child, lowLevelReady, output, errors, errorsByKind);
     }
 }

@@ -40,5 +40,6 @@ jobs:
             dist/SHA256SUMS.txt
             dist/BUILD-INFO.txt
             dist/BUILD-DEPENDENCIES.txt
+            dist/installers/**
           if-no-files-found: error
           retention-days: 30

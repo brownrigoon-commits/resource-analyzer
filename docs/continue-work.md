@@ -5,6 +5,7 @@
 지원 환경은 Windows 10/11 x64, Git, Python 3.12 x64(검증 기준)다. Python 3.11 이상을 허용한다.
 JavaScript 테스트에는 Node.js 22 이상이 필요하고, 앱 실행에는 Node.js가 필요하지 않다.
 인터넷 연결로 Python 패키지와 아래 고정 센서 배포본을 가져온다.
+공식 PawnIO 2.1.0 설치 파일·대응 소스·라이선스는 `installers/`에 포함되어 별도 다운로드 없이 사용할 수 있다.
 
 ```powershell
 git clone https://github.com/brownrigoon-commits/resource-analyzer.git
@@ -77,7 +78,7 @@ GitHub Actions는 Windows에서 위의 명시된 Python 검사, JavaScript 검�
 
 ## 현재 인계 상태 (2026-10-20)
 
-- 앱 버전: 0.5.1. CPU/GPU/RAM/디스크 모델·온도·상태 색상, 네트워크 연결 종류/실시간 사용량,
+- 앱 버전: 0.5.2. CPU/GPU/RAM/디스크 모델·온도·상태 색상, 네트워크 연결 종류/실시간 사용량,
   버튼으로 실행하는 다운로드·업로드 속도 테스트 구현 완료.
 - 안정 분배는 사용자가 켤 때만 작동한다. 속도 테스트 결과나 사용량만으로 가입 회선 상품을 단정하지 않는다.
 - 이번 작업: NVIDIA 전용 경로만 있어 AMD GPU가 표시되지 않던 문제를 수정했다. DXGI의 LUID로
@@ -89,14 +90,19 @@ GitHub Actions는 Windows에서 위의 명시된 Python 검사, JavaScript 검�
 - Windows DXGI/PDH는 GPU 온도를 제공하지 않는다. 안정 분배의 CUDA 작업 보호는 기존 NVIDIA
   공급원 제한을 유지하며, AMD/Intel 사용량 표시가 CUDA 작업 지원을 뜻하지 않는다.
 - 이전 환경 준비 검증: 별도 GitHub clone + 새 가상환경에서 센서 다운로드/해시 확인·Windows 실행 파일 빌드 성공.
-  이번 GPU 수정 후 명시된 Python 50개·JavaScript 5개 검사가 통과했다.
+  이번 GPU·온도 수정 후 명시된 Python 53개·JavaScript 5개 검사가 통과했다.
 - `test_gpu_windows.py`는 제조사·LUID 분리, 중복 엔진, PID 0, 메모리 집계, 미측정·실패·워밍업,
   NVIDIA/AMD 혼합 구성, 불완전한 NVIDIA 열거, 유효한 Windows 대체값이 없을 때 native 값 보존을 검사한다.
 - 이번 GPU 수정은 실제 AMD 외장·내장 GPU가 함께 있는 Windows PC에서 API와 Chrome 화면으로 확인했다.
   개인 측정값과 장치 식별자·프로그램 목록은 Git에 저장하지 않는다.
 - Windows 실행 파일의 초기 빌드는 성공했고, 최종 소스로 다시 패키징·독립 실행 검증을 진행한다.
   실행 중인 SensorBridge는 Windows 파일 잠금 때문에 제자리에서 재컴파일할 수 없다.
-- 추가 확인 요청: CPU/DIMM의 PawnIO 미설치 상태와 AMD GPU 온도 수집 경로를 조사 중이다.
+- 온도 후속 수정: GPU 센서 수집을 활성화하고 CPU/DIMM의 PawnIO 전제조건과 오류를 분리했다.
+  상단 GPU 온도는 읽을 수 있는 모든 GPU 센서 중 최고값이며, 실제 장치명은 별도 센서 목록에 표시한다.
+  사용률 장치와 온도 장치를 이름·순서로 추측 연결하지 않는다.
+- 사용자 요청으로 공식 PawnIO 2.1.0을 해시·서명 검증 후 설치했다. 설치 종료 코드 0,
+  서비스 Running을 확인했다. 재시작 후 CPU·DIMM 2개·내장 AMD GPU·디스크 온도가 측정됐다.
+  외장 AMD GPU는 현재 ADL 경로에서 온도 요청이 거절되어 추정하지 않는다.
 - 이 PC에는 E드라이브가 연결되어 있지 않아 E 설치 파일 백업은 수행할 수 없다.
   실행 파일은 작업 출력 폴더에 보관하고, E가 연결된 PC에서 위 백업 절차를 이어간다.
 - 인터넷 500Mbps/1Gbps **가입 상품**은 아직 확인되지 않았다. 공유기 로그인은 통신사 가입상품 로그인과 다르다.

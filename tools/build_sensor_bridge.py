@@ -20,6 +20,7 @@ LHM_URL = f"https://github.com/LibreHardwareMonitor/LibreHardwareMonitor/release
 LHM_SHA256 = "086d9f1b5a99e643edc2cfaaac16051685b551e4c5ac0b32a57c58c0e529c001"
 PAWN_URL = f"https://raw.githubusercontent.com/LibreHardwareMonitor/LibreHardwareMonitor/v{VERSION}/LibreHardwareMonitor/Resources/PawnIO_setup.exe"
 PAWN_SHA256 = "a3a46226c5e2824f4cdd42be0eecbabfc672c86f7889710f5ab1e6ad385b47a0"
+PAWN_LOCAL = ROOT / "installers" / "PawnIO_setup.exe"
 
 
 def write_if_changed(path: Path, data: bytes) -> None:
@@ -47,14 +48,18 @@ def verified_bytes(url: str, expected: str, local: Path | None = None) -> bytes:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--archive", type=Path, help="Use an already downloaded, checksum-verified release ZIP")
-    parser.add_argument("--pawnio-installer", type=Path, help="Use an already downloaded, checksum-verified PawnIO installer")
+    parser.add_argument("--pawnio-installer", type=Path,
+                        help="Use a checksum-verified PawnIO installer; defaults to installers/PawnIO_setup.exe when present")
     args = parser.parse_args()
     if os.name != "nt":
         raise SystemExit("The sensor bridge is built on Windows with .NET Framework 4.7.2 or later.")
     destination = ROOT / "vendor" / "sensors"
     destination.mkdir(parents=True, exist_ok=True)
     archive = verified_bytes(LHM_URL, LHM_SHA256, args.archive)
-    installer = verified_bytes(PAWN_URL, PAWN_SHA256, args.pawnio_installer)
+    installer_path = args.pawnio_installer
+    if installer_path is None and PAWN_LOCAL.is_file():
+        installer_path = PAWN_LOCAL
+    installer = verified_bytes(PAWN_URL, PAWN_SHA256, installer_path)
     with tempfile.TemporaryDirectory(prefix="resource-sensor-build-") as temporary:
         temporary = Path(temporary)
         zip_path = temporary / "LibreHardwareMonitor.zip"

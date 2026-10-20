@@ -76,12 +76,23 @@
   }
   function renderTemperatures(sys={},gpu=null,stale=false){
     const temperatures=sys.temperatures||{};
-    const sensors={cpu:temperatures.cpu,ram:temperatures.ram,disk:temperatures.disk,gpu:{temp_c:gpu?.temp_c,details:finite(gpu?.temp_c)?`${gpu.name||"GPU"} · 장치 온도`:"이 장치에서 읽을 수 있는 GPU 온도 센서가 없습니다."}};
+    // Sensor identities and DXGI identities are separate. Never attach a
+    // temperature to the busiest GPU by guessing its name or enumeration order.
+    const gpuReadings=stale?[]:[
+      ...rows(temperatures.gpu?.sensors).filter(s=>finite(s.temp_c)),
+      ...rows(sys.gpus).filter(g=>finite(g.temp_c)).map(g=>({name:`${g.name||"GPU"} · ${g.source||"장치 온도"}`,temp_c:g.temp_c}))
+    ];
+    const gpuTemperature=gpuReadings.length?{
+      temp_c:Math.max(...gpuReadings.map(s=>s.temp_c)),status:"ok",
+      details:`측정 가능한 GPU 센서 중 최고 온도 · ${gpuReadings.map(s=>`${s.name}: ${number(s.temp_c)}°C`).join(" · ")}`
+    }:temperatures.gpu||{temp_c:null,details:"읽을 수 있는 GPU 온도 센서가 없습니다."};
+    const sensors={cpu:temperatures.cpu,ram:temperatures.ram,disk:temperatures.disk,gpu:gpuTemperature};
+    $("gpu-temperature-sensors").innerHTML=gpuReadings.length?gpuReadings.map(s=>`<div class="device-line"><span>${safe(s.name)}</span><strong>${number(s.temp_c)}°C</strong></div>`).join(""):`<p class="subtle">${safe(stale?"온도 갱신 지연":gpuTemperature.details)}</p>`;
     const names={cpu:"CPU",gpu:"GPU",ram:"메모리",disk:"디스크"};
     Object.entries(sensors).forEach(([key,sensor])=>{
       const el=$(`${key}-temperature`),measured=!stale&&finite(sensor?.temp_c);
       const waiting=["starting","waiting","pending"].includes(sensor?.status);
-      el.textContent=stale?"온도 갱신 지연":measured?`온도 ${number(sensor.temp_c,0)}°C`:waiting?"온도 확인 중":"온도 확인 불가";
+      el.textContent=stale?"온도 갱신 지연":measured?`${key==="gpu"?"최고 온도":"온도"} ${number(sensor.temp_c,0)}°C`:waiting?"온도 확인 중":"온도 확인 불가";
       el.classList.toggle("unavailable",!measured);
       const limits=thermalLimits[key],level=levelFor(measured?sensor.temp_c:null,...limits);
       el.dataset.level=level;

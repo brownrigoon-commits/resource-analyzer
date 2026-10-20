@@ -56,6 +56,7 @@ htmlcov/
 /dist/
 /vendor/sensors/
 *.exe
+!/installers/PawnIO_setup.exe
 *.msi
 *.pdb
 
