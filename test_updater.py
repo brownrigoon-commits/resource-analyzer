@@ -1,7 +1,6 @@
 """Update guards use mocks: no live application is stopped or started."""
 import argparse
 import hashlib
-import io
 import json
 from pathlib import Path
 import tempfile
@@ -32,11 +31,11 @@ class UpdateTests(unittest.TestCase):
         self.busy = patch('entrypoint.port_busy', return_value=False).start()
         self.serve = patch('entrypoint.serve', return_value=0).start()
         self.launch = patch('entrypoint.launch', return_value=0).start()
-        self.open = patch('updater.build_opener').start()
+        self.open = patch('entrypoint.local_json').start()
         self.governor(active=None)
 
     def governor(self, **data):
-        self.open.return_value.open.return_value = io.BytesIO(json.dumps(data).encode())
+        self.open.return_value = data
 
     def test_verified_update_uses_normal_stop_and_preserves_collection_state(self):
         self.assertEqual(updater.apply_update(self.args, self.root), 0)

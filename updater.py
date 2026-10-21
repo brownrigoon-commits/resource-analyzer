@@ -4,7 +4,6 @@ import json
 from pathlib import Path
 import sys
 import time
-from urllib.request import ProxyHandler, build_opener
 
 from app_paths import VERSION
 
@@ -24,9 +23,7 @@ def apply_update(args, directory):
     if not current and entrypoint.port_busy(args.port):
         raise RuntimeError('The port belongs to an unidentified application. Nothing was changed.')
     if current:
-        with build_opener(ProxyHandler({})).open(
-                f'http://127.0.0.1:{args.port}/api/governor', timeout=3) as response:
-            governor = json.load(response)
+        governor = entrypoint.local_json(args.port, '/api/governor', timeout=3)
         if governor.get('active') is not None:
             raise RuntimeError('An allocated worker is active. Wait for it to finish and try again.')
         if current.get('version') == VERSION and any(

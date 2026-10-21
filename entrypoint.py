@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 from contextlib import contextmanager
+from http.client import HTTPConnection, HTTPException
 import json
 import logging
 import os
@@ -11,23 +12,39 @@ import socket
 import subprocess
 import sys
 import time
-from urllib.request import ProxyHandler, build_opener
 import webbrowser
 
 from app_paths import APP_ID, APP_NAME, VERSION, state_dir
 
 
+def local_json(port, path, timeout=.8):
+    """Read only this loopback service, without proxy or unrelated TLS setup."""
+    connection = HTTPConnection('127.0.0.1', port, timeout=timeout)
+    try:
+        connection.request('GET', path)
+        response = connection.getresponse()
+        if response.status != 200:
+            raise ValueError(f'Unexpected local HTTP status {response.status}')
+        payload = response.read(65537)
+        if len(payload) > 65536:
+            raise ValueError('Local control response exceeded the size limit')
+        value = json.loads(payload)
+        if not isinstance(value, dict):
+            raise ValueError('Local control response is not an object')
+        return value
+    finally:
+        connection.close()
+
+
 def health(port):
     """Never send local health requests through a configured internet proxy."""
     try:
-        with build_opener(ProxyHandler({})).open(
-                f'http://127.0.0.1:{port}/api/health', timeout=.8) as response:
-            value = json.load(response)
+        value = local_json(port, '/api/health')
         if value.get('app_id') != APP_ID:
             logging.warning('Local health probe returned an unexpected application identity on port %s', port)
             return None
         return value
-    except (OSError, ValueError, AttributeError) as error:
+    except (OSError, ValueError, HTTPException) as error:
         logging.info('Local health probe failed on port %s (%s): %s', port, type(error).__name__, error)
         return None
 
