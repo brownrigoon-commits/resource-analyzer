@@ -23,8 +23,12 @@ def health(port):
         with build_opener(ProxyHandler({})).open(
                 f'http://127.0.0.1:{port}/api/health', timeout=.8) as response:
             value = json.load(response)
-        return value if value.get('app_id') == APP_ID else None
-    except (OSError, ValueError, AttributeError):
+        if value.get('app_id') != APP_ID:
+            logging.warning('Local health probe returned an unexpected application identity on port %s', port)
+            return None
+        return value
+    except (OSError, ValueError, AttributeError) as error:
+        logging.info('Local health probe failed on port %s (%s): %s', port, type(error).__name__, error)
         return None
 
 
