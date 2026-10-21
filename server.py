@@ -272,6 +272,7 @@ def make_handler(monitor, port):
                         '/dashboard': 'index.html', '/app.js': 'app.js', '/style.css': 'style.css',
                         '/governor.js': 'governor.js',
                         '/speedtest.mjs': 'speedtest.mjs',
+                        '/resource-report.mjs': 'resource-report.mjs',
                         '/vendor/cloudflare-speedtest-1.14.2.mjs': 'vendor/cloudflare-speedtest-1.14.2.mjs',
                         '/welcome.js': 'welcome.js', '/welcome.css': 'welcome.css'}.get(parsed.path)
                 if not name or not (STATIC / name).is_file():

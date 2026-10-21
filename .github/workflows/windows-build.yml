@@ -31,7 +31,7 @@ jobs:
           RESOURCE_ANALYZER_DISABLE_SENSORS: '1'
         run: ./.venv-build/Scripts/python.exe -m unittest test_onboarding test_governor_http test_monitor test_system_metrics test_temperatures test_gpu_windows
       - name: JavaScript checks
-        run: node --test test_speedtest.mjs
+        run: node --test test_speedtest.mjs test_resource_report.mjs
       - uses: actions/upload-artifact@v4
         with:
           name: ResourceAnalyzer-Windows-x64-${{ github.sha }}

@@ -48,7 +48,7 @@ class OnboardingTests(unittest.TestCase):
             self.assertIsNone(self.monitor.thread)
 
     def test_speedtest_assets_are_local_and_connections_are_endpoint_scoped(self):
-        for path in ('/speedtest.mjs', '/vendor/cloudflare-speedtest-1.14.2.mjs'):
+        for path in ('/speedtest.mjs', '/resource-report.mjs', '/vendor/cloudflare-speedtest-1.14.2.mjs'):
             with self.request(path) as response:
                 self.assertIn('javascript', response.headers['Content-Type'])
                 self.assertGreater(len(response.read()), 100)
@@ -61,7 +61,7 @@ class OnboardingTests(unittest.TestCase):
 
     def test_script_mime_does_not_depend_on_windows_file_associations(self):
         with patch('mimetypes.guess_type', return_value=('text/plain', None)):
-            for path in ('/welcome.js', '/speedtest.mjs', '/vendor/cloudflare-speedtest-1.14.2.mjs'):
+            for path in ('/welcome.js', '/app.js', '/resource-report.mjs', '/speedtest.mjs', '/vendor/cloudflare-speedtest-1.14.2.mjs'):
                 with self.request(path) as response:
                     self.assertEqual(response.headers.get_content_type(), 'text/javascript')
 

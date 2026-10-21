@@ -1,4 +1,5 @@
 "use strict";
+import {usageLimits, thermalLimits, levelFor, temperatureReadings, renderResourceReport} from './resource-report.mjs';
 (() => {
   const $ = (id) => document.getElementById(id);
   const state = {snapshot:null,history:null,minutes:60,chartMode:"live",livePoints:[],mode:"live",sort:{live:{key:"cpu_pct",dir:-1},history:{key:"cpu_avg",dir:-1}},search:"",series:new Set(["cpu_pct","gpu_pct","ram_pct"]),selectedGroup:null,historyRequest:0,chartPoints:[],lastSuccess:0};
@@ -21,10 +22,8 @@
   const peakGpu = (gpus) => rows(gpus).reduce((best,g) => !best || (finite(g.util_pct)?g.util_pct:-1)>(finite(best.util_pct)?best.util_pct:-1) ? g : best,null);
   const engineName = (value) => {const match=String(value||"").match(/engtype_([a-z0-9_ -]+)/i);return match?match[1].replace(/_/g," "):value?"GPU 엔진":"";};
 
-  const levelFor = (value,watch,high) => !finite(value)?"unknown":value>=high?"high":value>=watch?"watch":"safe";
   const levelNames = {safe:"여유",watch:"주의",high:"높음",unknown:"미측정"};
   // Display guidance, not manufacturer limits or automatic workload control.
-  const thermalLimits = {cpu:[80,85],gpu:[80,90],ram:[65,80],disk:[55,65]};
   function setLevel(el,value,limits,description){
     const level=levelFor(value,...limits);
     el.dataset.level=level;
@@ -35,7 +34,7 @@
     const usage={cpu:sys.cpu_pct,gpu:gpu?.util_pct,ram:sys.ram_pct,disk:sys.disk_busy_pct};
     Object.entries(usage).forEach(([key,value])=>{
       const el=$(`${key}-value`),measured=stale?null:value;
-      const limits=key==="ram"?[80,90]:[70,90];
+      const limits=usageLimits[key];
       const description=key==="disk"?`가장 바쁜 물리 디스크 활동 ${percent(measured)} · 전송량과 별도`: `사용률 ${percent(measured)}`;
       const level=setLevel(el,measured,limits,description);
       el.setAttribute("aria-label",`${description} · ${levelNames[level]}${stale?" · 갱신 지연":""}`);
@@ -70,23 +69,12 @@
       const el=$(`network-${direction}`),value=valid?network[key]:null;
       el.textContent=number(value,2);
       const load=finite(value)&&finite(network.link_mbps)&&network.link_mbps>0?value/network.link_mbps*100:null;
-      setLevel(el,load,[70,90],"어댑터 연결 속도 대비 송수신 비율(%)");
+      setLevel(el,load,usageLimits.network,"어댑터 연결 속도 대비 송수신 비율(%)");
     }
     $("network-note").textContent=stale?"새 측정값을 기다리고 있습니다.":network.status==="disconnected"?"사용 가능한 기본 경로를 확인할 수 없습니다.":"실시간 송수신 · 인터넷 최대속도 테스트와 다릅니다.";
   }
   function renderTemperatures(sys={},gpu=null,stale=false){
-    const temperatures=sys.temperatures||{};
-    // Sensor identities and DXGI identities are separate. Never attach a
-    // temperature to the busiest GPU by guessing its name or enumeration order.
-    const gpuReadings=stale?[]:[
-      ...rows(temperatures.gpu?.sensors).filter(s=>finite(s.temp_c)),
-      ...rows(sys.gpus).filter(g=>finite(g.temp_c)).map(g=>({name:`${g.name||"GPU"} · ${g.temp_source||g.source||"장치 온도"}`,temp_c:g.temp_c}))
-    ];
-    const gpuTemperature=gpuReadings.length?{
-      temp_c:Math.max(...gpuReadings.map(s=>s.temp_c)),status:"ok",
-      details:`측정 가능한 GPU 센서 중 최고 온도 · ${gpuReadings.map(s=>`${s.name}: ${number(s.temp_c)}°C`).join(" · ")}`
-    }:temperatures.gpu||{temp_c:null,details:"읽을 수 있는 GPU 온도 센서가 없습니다."};
-    const sensors={cpu:temperatures.cpu,ram:temperatures.ram,disk:temperatures.disk,gpu:gpuTemperature};
+    const {gpuReadings,sensors}=temperatureReadings(sys,stale),gpuTemperature=sensors.gpu;
     $("gpu-temperature-sensors").innerHTML=gpuReadings.length?gpuReadings.map(s=>`<div class="device-line"><span>${safe(s.name)}</span><strong>${number(s.temp_c)}°C</strong></div>`).join(""):`<p class="subtle">${safe(stale?"온도 갱신 지연":gpuTemperature.details)}</p>`;
     const names={cpu:"CPU",gpu:"GPU",ram:"메모리",disk:"디스크"};
     Object.entries(sensors).forEach(([key,sensor])=>{
@@ -106,7 +94,7 @@
   function nextDeadlineAfter(deadline,now){const target=deadline+1000;return target>now?target:target+(Math.floor((now-target)/1000)+1)*1000;}
   async function pollSnapshot(){
     try{state.snapshot=await request("/api/snapshot");state.lastSuccess=Date.now();appendLiveSample(state.snapshot);renderSnapshot();}
-    catch(e){if(state.snapshot){renderTemperatures({},null,true);renderUsage({},null,true);renderNetwork({},true);}$("live-status").className="live-status waiting";if(e.starting){$("live-status").innerHTML=e.collectorError?"<i></i>수집 확인 필요":"<i></i>첫 측정 준비 중";$("last-update").textContent=state.lastSuccess?`마지막 수신 ${time(state.lastSuccess/1000,true)}`:"장치 정보를 확인하고 있습니다";$("errors-banner").hidden=!e.collectorError&&!state.snapshot;$("errors-banner").textContent=e.collectorError?`첫 측정 준비 중 확인이 필요합니다: ${String(e.collectorError)}`:state.snapshot?"새 측정을 준비 중입니다. 표시된 수치는 이전에 받은 마지막 값입니다.":"";}else{$("live-status").innerHTML="<i></i>연결 확인 필요";$("last-update").textContent=state.lastSuccess?`마지막 수신 ${time(state.lastSuccess/1000,true)}`:"서버에 연결할 수 없습니다";$("errors-banner").hidden=false;$("errors-banner").textContent="실시간 수집 서버 응답이 없습니다. 표시된 수치는 마지막으로 받은 값이며 새 측정값이 아닙니다. 연결을 자동으로 다시 확인합니다.";}}
+    catch(e){renderResourceReport(document,null);if(state.snapshot){renderTemperatures({},null,true);renderUsage({},null,true);renderNetwork({},true);}$("live-status").className="live-status waiting";if(e.starting){$("live-status").innerHTML=e.collectorError?"<i></i>수집 확인 필요":"<i></i>첫 측정 준비 중";$("last-update").textContent=state.lastSuccess?`마지막 수신 ${time(state.lastSuccess/1000,true)}`:"장치 정보를 확인하고 있습니다";$("errors-banner").hidden=!e.collectorError&&!state.snapshot;$("errors-banner").textContent=e.collectorError?`첫 측정 준비 중 확인이 필요합니다: ${String(e.collectorError)}`:state.snapshot?"새 측정을 준비 중입니다. 표시된 수치는 이전에 받은 마지막 값입니다.":"";}else{$("live-status").innerHTML="<i></i>연결 확인 필요";$("last-update").textContent=state.lastSuccess?`마지막 수신 ${time(state.lastSuccess/1000,true)}`:"서버에 연결할 수 없습니다";$("errors-banner").hidden=false;$("errors-banner").textContent="실시간 수집 서버 응답이 없습니다. 표시된 수치는 마지막으로 받은 값이며 새 측정값이 아닙니다. 연결을 자동으로 다시 확인합니다.";}}
     finally{const now=performance.now();snapshotDeadline=nextDeadlineAfter(snapshotDeadline,now);window.setTimeout(pollSnapshot,Math.max(0,snapshotDeadline-now));}
   }
   async function pollHistory(){await loadHistory();window.setTimeout(pollHistory,30000);}
@@ -124,6 +112,7 @@
     $("disk-value").textContent=number(sum(sys.disk_read_mbps,sys.disk_write_mbps),1);$("disk-detail").textContent=`활동 ${percent(sys.disk_busy_pct)} · 읽기 ${number(sys.disk_read_mbps,1)} · 쓰기 ${number(sys.disk_write_mbps,1)} MiB/s`;$("disk-detail").title=$("disk-detail").textContent;
     renderTemperatures(sys,gpu,s.stale===true);
     renderUsage(sys,gpu,s.stale===true);renderHardware(sys,gpu);renderNetwork(sys.network,s.stale===true);
+    renderResourceReport(document,s);
     renderInsights();renderDevices();renderVoice();renderRecording();renderTable();renderChart();
     if(state.selectedGroup)renderDialog();
     const errors=rows(s.errors).slice();if(s.stale)errors.unshift("새 측정값이 지연되어 마지막 수신값을 표시하고 있습니다");$("errors-banner").hidden=!errors.length;

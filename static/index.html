@@ -7,7 +7,7 @@
   <meta name="theme-color" content="#10151e">
   <title>자원 분석기</title>
   <link rel="stylesheet" href="/style.css">
-  <script src="/app.js" defer></script>
+  <script type="module" src="/app.js"></script>
   <script src="/governor.js" defer></script>
   <script type="module" src="/speedtest.mjs"></script>
 </head>
@@ -44,6 +44,11 @@
             </div>
           </div>
         </article>
+        <section id="resource-report" class="resource-report" aria-labelledby="resource-report-title" data-state="waiting">
+          <div class="resource-report-heading"><h3 id="resource-report-title">주의·높음 원인 보고</h3><span id="resource-report-updated">첫 측정 대기</span></div>
+          <p id="resource-report-status" class="resource-report-status" role="status" aria-live="polite">새 측정값을 기다리고 있습니다.</p>
+          <ul id="resource-report-list" class="resource-report-list" hidden></ul>
+        </section>
         <div class="metric-guide"><span class="status-legend"><span data-level="safe">● 여유</span><span data-level="watch">● 주의</span><span data-level="high">● 높음</span></span><span>사용량·온도 별도 기준 · 색상은 참고 지표</span></div>
         <p class="metric-footnote">CPU·GPU·메모리 %는 각 장치 기준입니다. 높은 사용률이 과열을 뜻하지는 않습니다.</p>
       </section>
