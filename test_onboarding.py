@@ -1,5 +1,6 @@
 """Local opt-in and request-boundary tests; no real collection in these tests."""
 import json
+import re
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 import tempfile
@@ -8,6 +9,7 @@ import unittest
 from unittest.mock import patch
 import urllib.error
 import urllib.request
+from urllib.parse import urljoin, urlparse
 
 from server import Monitor, make_handler, voice_status
 
@@ -46,6 +48,21 @@ class OnboardingTests(unittest.TestCase):
             self.assertFalse(health['collecting'])
             collector.assert_not_called()
             self.assertIsNone(self.monitor.thread)
+
+    def test_dashboard_import_graph_is_served_as_javascript(self):
+        pending, seen = ['/app.js', '/governor.js'], set()
+        while pending:
+            path = pending.pop()
+            if path in seen:
+                continue
+            seen.add(path)
+            with self.request(path) as response:
+                self.assertEqual(response.headers.get_content_type(), 'text/javascript', path)
+                source = response.read().decode('utf-8')
+            for dependency in re.findall(r'''(?:from\s*|import\s*(?:\(\s*)?)['"](\.[^'"]+)['"]''', source):
+                pending.append(urlparse(urljoin(self.base + path, dependency)).path)
+            self.assertLess(len(seen), 50)
+        self.assertFalse(self.monitor.collecting)
 
     def test_speedtest_assets_are_local_and_connections_are_endpoint_scoped(self):
         for path in ('/speedtest.mjs', '/resource-report.mjs', '/resource-rules.mjs', '/warning-history.mjs', '/vendor/cloudflare-speedtest-1.14.2.mjs'):
