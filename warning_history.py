@@ -13,6 +13,8 @@ if not _rules.startswith('export default ') or not _rules.endswith(';'):
     raise ValueError('Invalid shared resource rules')
 RULES = json.loads(_rules[len('export default '):-1])
 NAMES = {'cpu': 'CPU', 'gpu': 'GPU', 'ram': '메모리', 'disk': '디스크'}
+STAGES = {'qwen-vision': 'Qwen 화면 분석', 'qwen-summary': 'Qwen 결과 요약',
+          'whisper-asr': '음성 인식', 'cosyvoice-synthesis': '음성 합성', 'audio-preprocess': '음성 전처리'}
 
 
 def finite(value):
@@ -23,15 +25,46 @@ def number(value, digits=1):
     return f'{value:,.{digits}f}' if finite(value) else '—'
 
 
+def observed_activity(snapshot, group, resource):
+    if not group:
+        return {'program': '미확인', 'task': '미확인'}
+    processes = group.get('processes') or []
+    field = {'cpu': 'cpu_pct', 'gpu': 'gpu_pct', 'ram': 'ram_gb'}.get(resource)
+    def weight(process):
+        if resource == 'disk':
+            return sum(process.get(k) or 0 for k in ('io_read_mbps', 'io_write_mbps') if finite(process.get(k)))
+        return process.get(field) if finite(process.get(field)) else -1
+    process = max(processes, key=weight, default={})
+    workload = snapshot.get('workload') or {}
+    # A coincident task in another app (or a reused PID) is not attribution.
+    owner = next((p for p in processes if p.get('pid') == workload.get('owner_pid')
+                  and finite(p.get('created_at')) and finite(workload.get('owner_created'))
+                  and abs(p['created_at'] - workload['owner_created']) < .01), None)
+    if owner and workload.get('stage') in STAGES:
+        task = STAGES[workload['stage']]
+    elif process.get('script'):
+        task = process['script']
+    elif resource == 'gpu':
+        engine = str(group.get('gpu_engine') or '').lower()
+        task = next((label for key, label in [('videoencode', '영상 인코딩'), ('videodecode', '영상 디코딩'),
+                    ('compute', 'GPU 연산'), ('cuda', 'GPU 연산'), ('3d', '3D 렌더링'), ('copy', 'GPU 데이터 전송')]
+                     if key in engine.replace('_', '').replace(' ', '')), '세부 작업 미확인')
+    else:
+        task = '세부 작업 미확인'
+    if task == '세부 작업 미확인' and process.get('name'):
+        task = process['name'] + ' · 세부 작업 미확인'
+    return {'program': group.get('name') or '이름 미확인', 'task': task}
+
+
 def warning_reports(snapshot):
     """Return measured values (including healthy ones) and warning evidence."""
     system = snapshot.get('system') or {}
     groups = snapshot.get('groups') or []
     gpus = system.get('gpus') or []
     gpu = max(gpus, key=lambda g: g.get('util_pct') if finite(g.get('util_pct')) else -1, default={})
-    measured, reports = {}, []
+    measured, reports, activities = {}, [], {}
 
-    def add(key, title, value, limits, unit, evidence, note, cause=''):
+    def add(key, title, value, limits, unit, evidence, note, cause='', activity=None):
         measured[key] = value if finite(value) else None
         if not finite(value) or value < limits[0]:
             return
@@ -40,7 +73,8 @@ def warning_reports(snapshot):
         reports.append({'id': key, 'title': title, 'level': level, 'numeric_value': value,
                         'value': number(value) + unit,
                         'reason': f'현재 {number(value)}{unit}로 {"높음" if level == "high" else "주의"} 표시 기준 {threshold}{unit} 이상입니다.',
-                        'evidence': evidence, 'note': note, 'cause': str(cause)})
+                        'evidence': evidence, 'note': note, 'cause': str(cause),
+                        **(activity or {'program': '미확인', 'task': '미확인'})})
 
     for key, value in {'cpu': system.get('cpu_pct'), 'gpu': gpu.get('util_pct'),
                        'ram': system.get('ram_pct'), 'disk': system.get('disk_busy_pct')}.items():
@@ -68,10 +102,13 @@ def warning_reports(snapshot):
             'disk': f'물리 디스크 읽기 {number(system.get("disk_read_mbps"))} · 쓰기 {number(system.get("disk_write_mbps"))} MiB/s. 논리 I/O와 달라 특정 프로그램·드라이브가 원인이라고 확정할 수 없습니다.',
         }[key]
         cause = str(top[0].get('id') or top[0].get('name')) if top else ''
+        activity = observed_activity(snapshot, top[0] if top else None, key)
+        activities[key] = activity
+        cause += '|' + activity['task']
         if key == 'gpu':
             cause += '|' + str(gpu.get('name', ''))
         add(key + '-usage', NAMES[key] + (' 활동률' if key == 'disk' else ' 사용률'), value,
-            RULES['usage'][key], '%', evidence, note, cause)
+            RULES['usage'][key], '%', evidence, note, cause, activity)
 
     temperatures = system.get('temperatures') or {}
     gpu_sensors = [s for s in (temperatures.get('gpu') or {}).get('sensors', []) if finite(s.get('temp_c'))]
@@ -82,7 +119,8 @@ def warning_reports(snapshot):
         evidence = f'온도 센서: {sensor["name"]}' if sensor.get('name') else sensor.get('details') or '장치 온도 센서의 실측값입니다.'
         add(key + '-temperature', NAMES[key] + (' 최고 온도' if key == 'gpu' else ' 온도'), sensor.get('temp_c'),
             RULES['thermal'][key], '°C', evidence,
-            '표시 참고 기준입니다. 온도만으로 냉각·팬·주변 온도 등 물리적인 상승 원인을 확정할 수 없습니다.', sensor.get('name', ''))
+            '표시 참고 기준입니다. 온도만으로 냉각·팬·주변 온도 등 물리적인 상승 원인을 확정할 수 없습니다.',
+            sensor.get('name', ''), {**activities[key], 'simultaneous': True})
 
     network = system.get('network') or {}
     disconnected = network.get('kind') == 'disconnected'

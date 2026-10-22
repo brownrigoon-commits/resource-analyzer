@@ -116,17 +116,20 @@ class Collector:
             meta = self.metadata.get(identity)
             if meta is None:
                 name, command, exe = raw['name'], [], ''
+                created_at = None
                 try:
                     proc = psutil.Process(pid)
                     with proc.oneshot():
+                        created_at = proc.create_time()
                         name, command, exe = proc.name(), proc.cmdline(), proc.exe()
                 except (psutil.AccessDenied, psutil.NoSuchProcess, OSError):
                     denied += 1
                 scripts = [Path(x).name for x in command if x.lower().endswith(('.py', '.js', '.mjs', '.ps1'))]
-                meta = {'label': classify(name, exe, command), 'script': scripts[-1] if scripts else '', 'name': name}
+                meta = {'label': classify(name, exe, command), 'script': scripts[-1] if scripts else '',
+                        'name': name, 'created_at': created_at}
                 self.metadata[identity] = meta
             processes[pid] = {
-                'pid': pid, 'ppid': raw.get('ppid'), 'name': meta['name'],
+                'pid': pid, 'created_at': meta['created_at'], 'ppid': raw.get('ppid'), 'name': meta['name'],
                 'label': meta['label'], 'script': meta['script'],
                 'cpu_pct': round(min(100, max(0, raw.get('cpu_pct') or 0)), 2),
                 'ram_gb': round(raw.get('ram_gb') or 0, 4),

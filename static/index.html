@@ -31,11 +31,10 @@
           <div class="resource-report-heading"><h3 id="resource-report-title">주의·높음 원인 기록</h3><button id="resource-report-toggle" type="button" aria-expanded="true" aria-controls="resource-report-body">기록 접기</button></div>
           <p id="resource-report-status" class="resource-report-status" role="status" aria-live="polite">저장된 기록 확인 중</p>
           <div id="resource-report-body">
-            <p id="resource-report-updated" class="resource-report-status">기록 연결 확인 중</p>
-            <p class="resource-report-help">발생 시각·원인·최고값을 PC에 계속 보관합니다. 같은 주의 상태는 한 구간으로 묶고, 상태나 주요 프로그램이 바뀌면 새 기록을 남깁니다.</p>
-            <p id="resource-report-empty" class="resource-report-status">아직 저장된 기록이 없습니다. 이후 주의·높음 상태가 발생하면 여기에 쌓입니다.</p>
+            <p id="resource-report-updated" class="resource-report-status" hidden>기록 연결 확인 중</p>
+            <p id="resource-report-empty" class="resource-report-status">아직 기록이 없습니다.</p>
             <ul id="resource-report-list" class="resource-report-list" hidden></ul>
-            <div class="resource-report-pages"><button id="resource-report-older" type="button" disabled>이전 기록 보기</button><button id="resource-report-latest" type="button" hidden>최신 기록 보기</button><span>50건씩 표시 · 기록 자동 삭제 없음</span></div>
+            <div class="resource-report-pages"><button id="resource-report-older" type="button" disabled>이전 기록 보기</button><button id="resource-report-latest" type="button" hidden>최신 기록 보기</button></div>
             <p id="resource-report-error" class="resource-report-error" role="status" hidden></p>
           </div>
         </section>

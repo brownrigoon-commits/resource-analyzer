@@ -5,7 +5,7 @@ import time
 import unittest
 from collector import aggregate_gpu, classify
 from history import History
-from server import csv_safe, make_insights, next_sample_deadline
+from server import csv_safe, make_insights, next_sample_deadline, stable_workload
 
 
 def sample(ts, cpu=10, gpu=95, ram=40):
@@ -18,6 +18,18 @@ def sample(ts, cpu=10, gpu=95, ram=40):
 
 
 class MonitorTests(unittest.TestCase):
+    def test_workload_requires_same_live_lease_throughout_sample(self):
+        lease = {'stage': 'qwen-vision', 'device': 'cuda', 'owner_pid': 42,
+                 'owner_created': 100.0, 'request_id': 'sample-1'}
+        self.assertEqual(stable_workload(lease, dict(lease)),
+                         {'stage': 'qwen-vision', 'owner_pid': 42, 'owner_created': 100.0})
+        for key in lease:
+            self.assertIsNone(stable_workload(lease, {**lease, key: None}))
+            self.assertIsNone(stable_workload(lease, {**lease, key: 'changed'}))
+        self.assertIsNone(stable_workload(lease, {**lease, 'orphaned': True}))
+        self.assertIsNone(stable_workload(None, lease))
+        self.assertIsNone(stable_workload(lease, None))
+
     def test_sample_work_does_not_extend_one_second_period(self):
         self.assertEqual(next_sample_deadline(10, 10.3), 11)
         self.assertEqual(next_sample_deadline(11, 11.4), 12)

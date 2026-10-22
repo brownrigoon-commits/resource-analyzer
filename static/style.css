@@ -54,7 +54,10 @@
 .metric-card .disk-capacity p{font-size:10px;line-height:1.7;white-space:normal;overflow:visible;text-overflow:clip;margin:0;color:#c5d2e3}
 .disk-capacity .capacity-bar{margin:5px 0 0}
 .resource-report-list[hidden]{display:none}
-.resource-report-item{padding:13px 15px;border:1px solid #625737;border-left:3px solid #f0cf70;border-radius:6px;background:#25231d}
+.resource-report-item{padding:10px 13px;border:1px solid #625737;border-left:3px solid #f0cf70;border-radius:6px;background:#25231d}
+.resource-report-heading-main{display:flex;align-items:baseline;flex-wrap:wrap;gap:5px 12px}
+.resource-report-heading-main time{font-size:10px;color:#b7c4d6;font-variant-numeric:tabular-nums}
+.resource-report-item p.resource-report-activity{margin-top:5px;font-size:11px;line-height:1.6;color:#d4dfec}
 .resource-report-item[data-level="high"]{border-color:#65404a;border-left-color:#ff929c;background:#2b2027}
 .resource-report-item-heading{display:flex;justify-content:space-between;align-items:baseline;gap:7px 16px;flex-wrap:wrap}
 .resource-report-item h4{font-size:12px;font-weight:600;color:#e4eaf3}

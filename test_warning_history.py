@@ -2,7 +2,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from warning_history import WarningHistory, warning_reports
+from warning_history import WarningHistory, warning_reports, observed_activity
 
 
 def snapshot(ts, cpu=75, cause='synthetic-ai'):
@@ -29,6 +29,40 @@ class WarningHistoryTests(unittest.TestCase):
         self.assertEqual(event['end_reason'], 'recovered')
         self.assertIn('synthetic-ai', event['evidence'])
         self.assertEqual(events['active_count'], 0)
+
+    def test_registered_task_requires_matching_process_identity(self):
+        process = {'pid': 42, 'created_at': 100.0, 'script': 'worker.py', 'cpu_pct': 50}
+        group = {'name': 'Synthetic AI', 'processes': [process]}
+        data = {'workload': {'stage': 'qwen-vision', 'owner_pid': 42, 'owner_created': 100.0}}
+        self.assertEqual(observed_activity(data, group, 'cpu'),
+                         {'program': 'Synthetic AI', 'task': 'Qwen 화면 분석'})
+        for changes in ({'owner_pid': 43}, {'owner_created': 101.0}, {'stage': 'unknown'}):
+            modified = {'workload': {**data['workload'], **changes}}
+            self.assertEqual(observed_activity(modified, group, 'cpu')['task'], 'worker.py')
+
+    def test_activity_uses_measured_program_script_or_gpu_engine(self):
+        group = {'name': 'Synthetic AI', 'gpu_engine': 'engtype_Compute_0', 'processes': []}
+        self.assertEqual(observed_activity({}, group, 'gpu')['task'], 'GPU 연산')
+        self.assertEqual(observed_activity({}, group, 'cpu')['task'], '세부 작업 미확인')
+        group['processes'] = [{'script': 'reader.py', 'io_read_mbps': 2, 'io_write_mbps': 0},
+                              {'script': 'writer.py', 'io_read_mbps': 0, 'io_write_mbps': 20}]
+        self.assertEqual(observed_activity({}, group, 'disk')['task'], 'writer.py')
+        self.assertEqual(observed_activity({}, None, 'gpu')['program'], '미확인')
+
+    def test_saved_task_follows_peak_and_is_not_replaced_by_current_work(self):
+        first = snapshot(1000, 75)
+        first['groups'][0]['processes'] = [{'script': 'render.py', 'cpu_pct': 50}]
+        self.history.record(first)
+        higher = {**first, 'ts': 1001, 'system': {**first['system'], 'cpu_pct': 85}}
+        self.history.record(higher)
+        changed = snapshot(1002, 75)
+        changed['groups'][0]['processes'] = [{'script': 'transcribe.py', 'cpu_pct': 50}]
+        self.history.record(changed)
+        events = WarningHistory(self.path).read()['events']
+        self.assertEqual(len(events), 2)
+        self.assertEqual(events[0]['task'], 'transcribe.py')
+        self.assertEqual(events[1]['task'], 'render.py')
+        self.assertEqual(events[1]['value'], '85.0%')
 
     def test_continuous_warning_updates_peak_without_duplicate_rows(self):
         for ts, value in [(1000, 75), (1001, 85), (1002, 72)]:

@@ -31,6 +31,15 @@ def next_sample_deadline(deadline, completed_at):
     return max(deadline + SAMPLE_INTERVAL_S, completed_at)
 
 
+def stable_workload(before, after):
+    if not before or not after or before.get('orphaned') or after.get('orphaned'):
+        return None
+    keys = ('stage', 'device', 'owner_pid', 'owner_created', 'request_id')
+    if any(before.get(key) is None or before.get(key) != after.get(key) for key in keys):
+        return None
+    return {key: after[key] for key in ('stage', 'owner_pid', 'owner_created')}
+
+
 def voice_status(data):
     try:
         config = json.loads((data / 'integrations.json').read_text(encoding='utf-8'))
@@ -177,7 +186,12 @@ class Monitor:
                     break
                 begin = time.monotonic()
                 try:
+                    workload_before = self.governor.status().get('active')
                     sample = collector.sample()
+                    if workload_before:
+                        workload = stable_workload(workload_before, self.governor.status().get('active'))
+                        if workload:
+                            sample['workload'] = workload
                     sample['sample_duration_s'] = begin - last_sample
                     sample['collection_duration_s'] = time.monotonic() - begin
                     last_sample = begin

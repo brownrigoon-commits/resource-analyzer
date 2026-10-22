@@ -17,18 +17,31 @@ function fixture() {
 }
 const event = (values={}) => ({event_id:2,title:'CPU 使用 <img src=x>',level:'high',value:'95.0%',last_value:'91.0%',
   started_at:1700000000,last_seen:1700000100,ended_at:1700000200,end_reason:'recovered',sample_count:5,
-  reason:'기준 90% 이상',evidence:'Synthetic AI',note:'측정 기준',...values});
+  reason:'기준 90% 이상',evidence:'관측 근거 전체 설명',note:'측정 기준',program:'Synthetic AI',task:'render.py',...values});
 const data = values => ({events:[event()],total:1,active_count:0,collecting:true,stale:false,next_before:null,...values});
 const allText = node => [node.textContent,...node.children.map(allText)].join(' ');
 const timers = {setTimeout(){return 1;},clearTimeout(){}};
 
-test('recovered warnings retain dates, reasons and peak values as literal text',()=>{
+test('compact records show occurrence, program, task and peak as literal text',()=>{
   const doc=fixture();renderWarningHistory(doc,data());
   const list=doc.getElementById('resource-report-list');
-  assert.match(allText(list),/발생.*마지막 관측/);
-  assert.match(allText(list),/정상 복귀/);assert.match(allText(list),/95.0%/);
+  assert.match(allText(list),/2023/);
+  assert.match(allText(list),/최고 95.0%/);assert.match(allText(list),/작업: render.py/);
   assert.match(allText(list),/Synthetic AI/);assert.match(allText(list),/<img src=x>/);
+  assert.doesNotMatch(allText(list),/마지막 관측|정상 복귀|기준 90|관측 근거 전체 설명|측정 기준/);
+  assert(doc.getElementById('resource-report-updated').hidden);
   const walk=node=>{assert(!Object.hasOwn(node,'innerHTML'));node.children.forEach(walk);};walk(list);
+});
+test('legacy records keep the original program without inventing past tasks',()=>{
+  const doc=fixture();renderWarningHistory(doc,data({events:[event({program:null,task:null,
+    evidence:'같은 시점 사용량 상위: Old AI 83.0% · Other AI 10.0%'})]}));
+  const text=allText(doc.getElementById('resource-report-list'));
+  assert.match(text,/상위 프로그램: Old AI · 작업: 세부 작업 미확인/);
+  assert.doesNotMatch(text,/Other AI|83.0%/);
+});
+test('temperature records distinguish simultaneous activity from proven heat cause',()=>{
+  const doc=fixture();renderWarningHistory(doc,data({events:[event({id:'gpu-temperature',value:'85.0°C'})]}));
+  assert.match(allText(doc.getElementById('resource-report-list')),/동시 관측: Synthetic AI.*발열 원인 미확인/);
 });
 test('a connection error preserves already displayed history',async()=>{
   const doc=fixture();let fail=false;
