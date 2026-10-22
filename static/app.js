@@ -1,5 +1,6 @@
 "use strict";
-import {usageLimits, thermalLimits, levelFor, temperatureReadings, renderResourceReport} from './resource-report.mjs';
+import {usageLimits, thermalLimits, levelFor, temperatureReadings, systemDiskCapacity} from './resource-report.mjs';
+import {mountWarningHistory} from './warning-history.mjs';
 (() => {
   const $ = (id) => document.getElementById(id);
   const state = {snapshot:null,history:null,minutes:60,chartMode:"live",livePoints:[],mode:"live",sort:{live:{key:"cpu_pct",dir:-1},history:{key:"cpu_avg",dir:-1}},search:"",series:new Set(["cpu_pct","gpu_pct","ram_pct"]),selectedGroup:null,historyRequest:0,chartPoints:[],lastSuccess:0};
@@ -57,6 +58,13 @@ import {usageLimits, thermalLimits, levelFor, temperatureReadings, renderResourc
     $("disk-spec").textContent=systemDisk?[systemDisk.drive,systemDisk.bus,`${number(systemDisk.size/1e12,1)} TB`,disks.length>1?`외 ${disks.length-1}개`:null].filter(Boolean).join(" · "):"전체 물리 디스크";
     $("hardware-summary").textContent="장치별 사용량과 온도를 실시간으로 확인합니다.";
   }
+  function renderDiskCapacity(sys={},stale=false){
+    const capacity=stale?null:systemDiskCapacity(sys),summary=$("disk-capacity-summary"),bar=$("disk-capacity-bar");
+    summary.textContent=capacity?`${capacity.drive} · 사용 ${number(capacity.used)} GiB · 남음 ${number(capacity.free)} GiB`:stale?"용량 갱신 지연":"용량 정보 확인 중";
+    summary.title=capacity?`전체 ${number(capacity.total)} GiB · 약 15초마다 용량 확인`:"시스템 드라이브 용량 측정 대기";
+    bar.hidden=!capacity;
+    if(capacity){bar.querySelector("i").style.width=`${clamp(capacity.used/capacity.total*100)}%`;bar.classList.toggle("warning",capacity.used/capacity.total>=.9);}
+  }
   function renderNetwork(network={},stale=false){
     const kinds={wired:"유선",wireless:"무선 · Wi-Fi",virtual:"가상 · VPN",other:"기타 연결",disconnected:"연결 없음",unknown:"연결 확인 중"};
     const valid=!stale&&network.status==="ok";
@@ -94,7 +102,7 @@ import {usageLimits, thermalLimits, levelFor, temperatureReadings, renderResourc
   function nextDeadlineAfter(deadline,now){const target=deadline+1000;return target>now?target:target+(Math.floor((now-target)/1000)+1)*1000;}
   async function pollSnapshot(){
     try{state.snapshot=await request("/api/snapshot");state.lastSuccess=Date.now();appendLiveSample(state.snapshot);renderSnapshot();}
-    catch(e){renderResourceReport(document,null);if(state.snapshot){renderTemperatures({},null,true);renderUsage({},null,true);renderNetwork({},true);}$("live-status").className="live-status waiting";if(e.starting){$("live-status").innerHTML=e.collectorError?"<i></i>수집 확인 필요":"<i></i>첫 측정 준비 중";$("last-update").textContent=state.lastSuccess?`마지막 수신 ${time(state.lastSuccess/1000,true)}`:"장치 정보를 확인하고 있습니다";$("errors-banner").hidden=!e.collectorError&&!state.snapshot;$("errors-banner").textContent=e.collectorError?`첫 측정 준비 중 확인이 필요합니다: ${String(e.collectorError)}`:state.snapshot?"새 측정을 준비 중입니다. 표시된 수치는 이전에 받은 마지막 값입니다.":"";}else{$("live-status").innerHTML="<i></i>연결 확인 필요";$("last-update").textContent=state.lastSuccess?`마지막 수신 ${time(state.lastSuccess/1000,true)}`:"서버에 연결할 수 없습니다";$("errors-banner").hidden=false;$("errors-banner").textContent="실시간 수집 서버 응답이 없습니다. 표시된 수치는 마지막으로 받은 값이며 새 측정값이 아닙니다. 연결을 자동으로 다시 확인합니다.";}}
+    catch(e){renderDiskCapacity({},true);if(state.snapshot){renderTemperatures({},null,true);renderUsage({},null,true);renderNetwork({},true);}$("live-status").className="live-status waiting";if(e.starting){$("live-status").innerHTML=e.collectorError?"<i></i>수집 확인 필요":"<i></i>첫 측정 준비 중";$("last-update").textContent=state.lastSuccess?`마지막 수신 ${time(state.lastSuccess/1000,true)}`:"장치 정보를 확인하고 있습니다";$("errors-banner").hidden=!e.collectorError&&!state.snapshot;$("errors-banner").textContent=e.collectorError?`첫 측정 준비 중 확인이 필요합니다: ${String(e.collectorError)}`:state.snapshot?"새 측정을 준비 중입니다. 표시된 수치는 이전에 받은 마지막 값입니다.":"";}else{$("live-status").innerHTML="<i></i>연결 확인 필요";$("last-update").textContent=state.lastSuccess?`마지막 수신 ${time(state.lastSuccess/1000,true)}`:"서버에 연결할 수 없습니다";$("errors-banner").hidden=false;$("errors-banner").textContent="실시간 수집 서버 응답이 없습니다. 표시된 수치는 마지막으로 받은 값이며 새 측정값이 아닙니다. 연결을 자동으로 다시 확인합니다.";}}
     finally{const now=performance.now();snapshotDeadline=nextDeadlineAfter(snapshotDeadline,now);window.setTimeout(pollSnapshot,Math.max(0,snapshotDeadline-now));}
   }
   async function pollHistory(){await loadHistory();window.setTimeout(pollHistory,30000);}
@@ -111,8 +119,7 @@ import {usageLimits, thermalLimits, levelFor, temperatureReadings, renderResourc
     $("ram-value").textContent=number(sys.ram_pct);$("ram-detail").textContent=`${number(sys.ram_used_gb)} / ${number(sys.ram_total_gb)} GiB · 여유 ${number(sys.ram_available_gb)} GiB`;
     $("disk-value").textContent=number(sum(sys.disk_read_mbps,sys.disk_write_mbps),1);$("disk-detail").textContent=`활동 ${percent(sys.disk_busy_pct)} · 읽기 ${number(sys.disk_read_mbps,1)} · 쓰기 ${number(sys.disk_write_mbps,1)} MiB/s`;$("disk-detail").title=$("disk-detail").textContent;
     renderTemperatures(sys,gpu,s.stale===true);
-    renderUsage(sys,gpu,s.stale===true);renderHardware(sys,gpu);renderNetwork(sys.network,s.stale===true);
-    renderResourceReport(document,s);
+    renderUsage(sys,gpu,s.stale===true);renderHardware(sys,gpu);renderNetwork(sys.network,s.stale===true);renderDiskCapacity(sys,s.stale===true);
     renderInsights();renderDevices();renderVoice();renderRecording();renderTable();renderChart();
     if(state.selectedGroup)renderDialog();
     const errors=rows(s.errors).slice();if(s.stale)errors.unshift("새 측정값이 지연되어 마지막 수신값을 표시하고 있습니다");$("errors-banner").hidden=!errors.length;
@@ -211,5 +218,6 @@ import {usageLimits, thermalLimits, levelFor, temperatureReadings, renderResourc
   $("history-chart").addEventListener("pointermove",e=>{const points=state.chartPoints;if(!points.length)return;const rect=e.currentTarget.getBoundingClientRect(),x=(e.clientX-rect.left)/rect.width*760,{first,span}=chartDomain(points),target=first+Math.max(0,Math.min(1,(x-40)/703))*span;let nearest=points[0];for(const p of points){if(Math.abs(p.ts-target)<Math.abs(nearest.ts-target))nearest=p;}const tooltip=$("chart-tooltip");tooltip.hidden=false;tooltip.innerHTML=`<b>${safe(state.chartMode==="live"?time(nearest.ts,true):date(nearest.ts))}</b>${[...state.series].map(k=>`<span style="color:${colors[k]}">${seriesNames[k]} ${percent(nearest[k])}</span>`).join("")}`;const wrap=$("chart-wrap").getBoundingClientRect();tooltip.style.left=`${Math.max(8,Math.min(wrap.width-155,e.clientX-wrap.left+12))}px`;const cursor=$("chart-cursor");if(cursor){const cx=40+(nearest.ts-first)/span*703;cursor.setAttribute("x1",cx);cursor.setAttribute("x2",cx);cursor.setAttribute("opacity",".55");}});
   $("history-chart").addEventListener("pointerleave",()=>{$("chart-tooltip").hidden=true;const cursor=$("chart-cursor");if(cursor)cursor.setAttribute("opacity","0");});
   document.addEventListener("click",e=>{const menu=document.querySelector(".export-menu");if(menu.open&&!menu.contains(e.target))menu.open=false;});
+  mountWarningHistory({doc:document,request});
   renderTable();renderChart();pollSnapshot();pollHistory();
 })();

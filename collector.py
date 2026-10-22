@@ -160,7 +160,7 @@ class Collector:
             for field in ('cpu_pct', 'ram_gb', 'io_read_mbps', 'io_write_mbps'):
                 group[field] = round(group[field], 3)
             group['processes'].sort(key=lambda p: (p['gpu_pct'] or 0, p['cpu_pct'], p['ram_gb']), reverse=True)
-        if now - self.last_partitions > 60:
+        if now - self.last_partitions > 15:
             self.disks = []
             for partition in psutil.disk_partitions():
                 try:

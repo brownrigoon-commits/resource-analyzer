@@ -39,7 +39,20 @@
 .resource-report-heading h3{font-size:13px;color:var(--text)}
 .resource-report-heading>span{font-size:10px;color:var(--muted);font-variant-numeric:tabular-nums}
 .resource-report-status{margin-top:8px;color:var(--muted);font-size:11px;line-height:1.6}
-.resource-report-list{list-style:none;padding:0;margin:12px 0 0;display:grid;gap:9px}
+.resource-report-list{list-style:none;padding:0;margin:12px 0 0;display:grid;gap:9px;max-height:560px;overflow:auto;scrollbar-color:#516078 #181f2b;overscroll-behavior:contain}
+.resource-report button{padding:6px 10px;border:1px solid #46546a;border-radius:5px;background:#222e3e;color:#d7e2ef;font-size:11px;min-height:34px}
+.resource-report button:hover:not(:disabled){border-color:#89b7d4}
+.resource-report button:disabled{opacity:.45;cursor:default}
+#resource-report-body[hidden],.resource-report-pages button[hidden],.resource-report-error[hidden]{display:none}
+.resource-report-help{font-size:10px;color:var(--muted);line-height:1.6;margin-top:8px}
+.resource-report-pages{display:flex;align-items:center;flex-wrap:wrap;gap:9px;margin-top:12px}
+.resource-report-pages span{font-size:10px;color:var(--muted)}
+.resource-report-error{font-size:11px;color:var(--warn);margin-top:10px;overflow-wrap:anywhere}
+.resource-report-item p.resource-report-time{color:#d8e3f1;font-variant-numeric:tabular-nums}
+.resource-report-item p.resource-report-state{color:#a5d7d0}
+.disk-capacity{position:relative;z-index:1;border-top:1px solid var(--border);margin-top:10px;padding-top:7px}
+.metric-card .disk-capacity p{font-size:10px;line-height:1.7;white-space:normal;overflow:visible;text-overflow:clip;margin:0;color:#c5d2e3}
+.disk-capacity .capacity-bar{margin:5px 0 0}
 .resource-report-list[hidden]{display:none}
 .resource-report-item{padding:13px 15px;border:1px solid #625737;border-left:3px solid #f0cf70;border-radius:6px;background:#25231d}
 .resource-report-item[data-level="high"]{border-color:#65404a;border-left-color:#ff929c;background:#2b2027}

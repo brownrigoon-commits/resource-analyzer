@@ -48,7 +48,7 @@ class OnboardingTests(unittest.TestCase):
             self.assertIsNone(self.monitor.thread)
 
     def test_speedtest_assets_are_local_and_connections_are_endpoint_scoped(self):
-        for path in ('/speedtest.mjs', '/resource-report.mjs', '/vendor/cloudflare-speedtest-1.14.2.mjs'):
+        for path in ('/speedtest.mjs', '/resource-report.mjs', '/resource-rules.mjs', '/warning-history.mjs', '/vendor/cloudflare-speedtest-1.14.2.mjs'):
             with self.request(path) as response:
                 self.assertIn('javascript', response.headers['Content-Type'])
                 self.assertGreater(len(response.read()), 100)
@@ -82,6 +82,18 @@ class OnboardingTests(unittest.TestCase):
 
     def test_private_integration_is_optional(self):
         self.assertEqual(voice_status(Path(self.temp.name)), {'available': False})
+
+    def test_warning_events_are_readable_without_a_browser_starting_collection(self):
+        self.monitor.warning_history.record({'ts': 1000, 'system': {'cpu_pct': 95}, 'groups': []})
+        self.monitor.warning_history.record({'ts': 1001, 'system': {'cpu_pct': 0}, 'groups': []})
+        with self.request('/api/warning-events?limit=1') as response:
+            value = json.load(response)
+        self.assertEqual(value['total'], 1)
+        self.assertEqual(value['events'][0]['end_reason'], 'recovered')
+        self.assertFalse(self.monitor.collecting)
+        with self.assertRaises(urllib.error.HTTPError) as error:
+            self.request('/api/warning-events?before=-1')
+        self.assertEqual(error.exception.code, 400)
 
 
 if __name__ == '__main__':

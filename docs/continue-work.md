@@ -1,5 +1,19 @@
 # 다른 PC·채팅에서 이어서 작업하기
 
+## 누적 경고 기록·디스크 용량 — 2026-10-22 (0.6.2)
+
+현재 요구는 경고를 정상 복귀 때 없애는 것이 아니라 발생 기록을 계속 보존하는 것이다. 아래 0.6.1 동작은 과거 버전 설명이다.
+`warning_history.py`가 수집기에서 브라우저와 독립적으로 `warning-events.sqlite3`에 매 측정 시 커밋한다.
+이 DB에는 자동 삭제가 없으며 7일 보관인 `usage.sqlite3`와 분리된다. 앱이 수집하지 않는 동안에는 새 경고를 관측할 수 없다.
+연속된 동일 수준·주요 프로그램은 한 구간에 최고값·최근값·관측 횟수를 갱신한다. 수준·주요 프로그램 변경 또는 재발은 새 기록이다.
+정상 복귀·측정 중단·앱 재시작을 구분하며 측정 중단을 정상 복귀로 표현하지 않는다.
+화면은 50건씩 커서로 탐색하고, 접기·펼치기 선택은 해당 브라우저에 기억한다. 화면 연결 실패 시 이미 읽은 기록을 지우지 않는다.
+기록 패널은 네트워크보다 위에 있다. 디스크 카드 용량은 시스템 드라이브 문자와 볼륨을 정확히 매칭하며 GiB 단위다.
+카드와 저장 기록의 공통 기준은 `static/resource-rules.mjs`의 ES-module JSON 객체다. 형식을 임의 JavaScript 코드로 바꾸지 않는다.
+이 DB·원본 측정 데이터는 공개 GitHub와 일반 E 설치 백업에 포함하지 않는다. 개인 기록 백업은 별도 범위를 정해야 한다.
+검증: `python -m unittest test_warning_history test_onboarding test_launcher_http test_updater test_monitor` 및
+`node --test test_warning_history_ui.mjs test_resource_report.mjs test_speedtest.mjs`.
+
 ## 실시간 주의·높음 보고 — 2026-10-22
 
 0.6.1의 네트워크 카드 아래 보고는 현재 주의·높음인 사용률·온도만 보여 준다.

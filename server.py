@@ -19,6 +19,7 @@ from history import History, mean, gpu_value
 from app_paths import APP_ID, VERSION, bundle_dir, state_dir
 from governor import Governor
 from resource_ipc import LocalIPC
+from warning_history import WarningHistory
 
 ROOT = bundle_dir()
 STATIC = ROOT / 'static'
@@ -104,6 +105,8 @@ class Monitor:
         data.mkdir(parents=True, exist_ok=True)
         self.data = data
         self.history = History(data / 'usage.sqlite3')
+        self.warning_history = WarningHistory(data / 'warning-events.sqlite3')
+        self.warning_error = None
         self.lock = threading.Lock()
         self.stop = threading.Event()
         self.latest = None
@@ -146,6 +149,19 @@ class Monitor:
             return {'app_id': APP_ID, 'version': VERSION, 'collecting': self.collecting,
                     'csrf_token': self.csrf_token, 'error': self.error}
 
+    def pause_warning_history(self, reason):
+        try:
+            self.warning_history.pause(reason)
+        except Exception as error:
+            self.warning_error = type(error).__name__ + ': ' + str(error)[:160]
+
+    def warning_events(self, limit=50, before=None):
+        result = self.warning_history.read(limit, before)
+        with self.lock:
+            result.update(collecting=self.collecting, stale=not self.latest or time.time() - self.latest['ts'] > 4,
+                          recording_error=self.warning_error)
+        return result
+
     def run(self):
         collector = None
         pending = []
@@ -168,6 +184,15 @@ class Monitor:
                     sample['voice'] = voice_status(self.data)
                     recent.append(sample)
                     sample['insights'] = make_insights(recent, sample['voice'])
+                    try:
+                        if sample['collection_duration_s'] > 4:
+                            self.warning_history.pause('measurement_gap')
+                        else:
+                            self.warning_history.record(sample)
+                        self.warning_error = None
+                    except Exception as error:
+                        self.warning_error = type(error).__name__ + ': ' + str(error)[:160]
+                        sample['errors'].append('주의·높음 기록 저장 실패: ' + self.warning_error)
                     pending.append(sample)
                     if time.monotonic() - last_record >= 15:
                         self.history.record(pending)
@@ -181,6 +206,7 @@ class Monitor:
                         self.latest = sample
                         self.error = None
                 except Exception as error:
+                    self.pause_warning_history('measurement_gap')
                     self.governor.invalidate('자원 수집 오류로 새 작업을 기다립니다')
                     with self.lock:
                         self.error = type(error).__name__ + ': ' + str(error)[:160]
@@ -191,6 +217,7 @@ class Monitor:
             with self.lock:
                 self.error = type(error).__name__ + ': ' + str(error)[:160]
         finally:
+            self.pause_warning_history('collection_stopped')
             self.governor.invalidate('자원 수집이 종료되었습니다')
             if pending:
                 self.history.record(pending)
@@ -255,6 +282,20 @@ def make_handler(monitor, port):
                 self.send(json.dumps(value, ensure_ascii=False, allow_nan=False).encode(), 'application/json; charset=utf-8', status)
             elif parsed.path == '/api/history':
                 self.send(json.dumps(monitor.history.read(minutes), ensure_ascii=False, allow_nan=False).encode(), 'application/json; charset=utf-8')
+            elif parsed.path == '/api/warning-events':
+                try:
+                    limit = int(query.get('limit', ['50'])[0])
+                    before = int(query['before'][0]) if 'before' in query else None
+                    if before is not None and not 1 <= before <= 9223372036854775807:
+                        raise ValueError('Invalid cursor')
+                    value = monitor.warning_events(limit, before)
+                except (ValueError, TypeError):
+                    self.send(b'Invalid warning history cursor', 'text/plain', 400)
+                    return
+                except Exception:
+                    self.send(b'{"error":"Warning history is temporarily unavailable"}', 'application/json', 503)
+                    return
+                self.send(json.dumps(value, ensure_ascii=False, allow_nan=False).encode(), 'application/json; charset=utf-8')
             elif parsed.path == '/api/export.csv':
                 kind = 'groups' if query.get('kind', ['system'])[0] == 'groups' else 'system'
                 output = io.StringIO()
@@ -273,6 +314,8 @@ def make_handler(monitor, port):
                         '/governor.js': 'governor.js',
                         '/speedtest.mjs': 'speedtest.mjs',
                         '/resource-report.mjs': 'resource-report.mjs',
+                        '/resource-rules.mjs': 'resource-rules.mjs',
+                        '/warning-history.mjs': 'warning-history.mjs',
                         '/vendor/cloudflare-speedtest-1.14.2.mjs': 'vendor/cloudflare-speedtest-1.14.2.mjs',
                         '/welcome.js': 'welcome.js', '/welcome.css': 'welcome.css'}.get(parsed.path)
                 if not name or not (STATIC / name).is_file():
