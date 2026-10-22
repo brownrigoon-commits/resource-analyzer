@@ -14,6 +14,14 @@
 검증: `python -m unittest test_warning_history test_onboarding test_launcher_http test_updater test_monitor` 및
 `node --test test_warning_history_ui.mjs test_resource_report.mjs test_speedtest.mjs`.
 
+완료 검증: Windows Python 검사 81개와 JavaScript 검사 15개 통과. 합성 브라우저 화면에서 정상 복귀 기록이 남는 것,
+접기·펼치기, 새로고침 후 접힘 선택 유지, 기록이 네트워크보다 위에 있는 것과 디스크 카드의 실제 볼륨 매칭을 확인했다.
+이 PC의 기본 포트는 실제 0.6.2로 정상 갱신했고 수집 활성화·새 측정 시각 진행·저장소 생성·기록 API 정상 응답을 확인했다.
+이전 자원 요약과 안정 분배 설정은 유지했다. 바탕화면 실행 파일도 갱신했으며 SHA-256을 검증했다.
+개인 경고 DB에 합성 시험 기록을 넣지 않았다. 배포 전의 순간 경고는 소급 생성하지 않는다.
+실행 패키지와 Git 소스 bundle은 기존 E 프로젝트 구조의 새 체크포인트에 크기·SHA-256 검증 후 보관했다.
+실행 파일의 빌드 커밋은 `BUILD-INFO.txt`를 기준으로 하며, 인계 문서만 변경된 최신 Git 커밋과 다를 수 있다.
+
 ## 실시간 주의·높음 보고 — 2026-10-22
 
 0.6.1의 네트워크 카드 아래 보고는 현재 주의·높음인 사용률·온도만 보여 준다.
