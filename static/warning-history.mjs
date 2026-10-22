@@ -1,4 +1,12 @@
+import taskLabels from './task-labels.mjs';
 const finite = value => typeof value === 'number' && Number.isFinite(value);
+const programRule = name => taskLabels.programs.find(rule => rule.aliases.some(alias => alias.toLowerCase() === name.toLowerCase()));
+function plainActivity(program, task) {
+  const rule = programRule(program);
+  const script = taskLabels.scripts.find(rule => program.toLowerCase().includes(rule.programContains) && rule.file === task);
+  const unknown = !task || /미확인/.test(task) || ['3D 렌더링', 'GPU 연산', 'GPU 데이터 전송'].includes(task) || rule?.aliases.some(alias => alias.toLowerCase() === task.toLowerCase());
+  return {program: rule?.name || program, task: script?.task || (rule && unknown ? rule.task : task || '이전 기록에 작업명 없음')};
+}
 const dateTime = value => finite(value) ? new Date(value * 1000).toLocaleString('ko-KR', {
   year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
 }) : '시각 미확인';
@@ -34,8 +42,14 @@ export function renderWarningHistory(doc, data) {
       main.append(time, title); heading.append(main, badge); row.append(heading);
       const activity = doc.createElement('p'); activity.className = 'resource-report-activity';
       const thermal = item.simultaneous || String(item.id).endsWith('-temperature');
-      activity.textContent = `${thermal ? '동시 관측' : '상위 프로그램'}: ${programFor(item)} · 작업: ${item.task || '세부 작업 미확인'}${thermal ? ' (발열 원인 미확인)' : ''}`;
+      const plain = plainActivity(programFor(item), item.task);
+      activity.textContent = `${thermal ? '동시 관측' : '프로그램'}: ${plain.program} · 작업: ${plain.task}${thermal ? ' (발열 원인 미확인)' : ''}`;
       row.append(activity);
+      if (item.context) {
+        const context = doc.createElement('p'); context.className = 'resource-report-context';
+        context.textContent = `동시 작업(원인 확정 아님): ${item.context}`;
+        row.append(context);
+      }
       return row;
     }));
   }

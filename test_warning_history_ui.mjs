@@ -36,12 +36,24 @@ test('legacy records keep the original program without inventing past tasks',()=
   const doc=fixture();renderWarningHistory(doc,data({events:[event({program:null,task:null,
     evidence:'같은 시점 사용량 상위: Old AI 83.0% · Other AI 10.0%'})]}));
   const text=allText(doc.getElementById('resource-report-list'));
-  assert.match(text,/상위 프로그램: Old AI · 작업: 세부 작업 미확인/);
+  assert.match(text,/프로그램: Old AI · 작업: 이전 기록에 작업명 없음/);
   assert.doesNotMatch(text,/Other AI|83.0%/);
 });
 test('temperature records distinguish simultaneous activity from proven heat cause',()=>{
   const doc=fixture();renderWarningHistory(doc,data({events:[event({id:'gpu-temperature',value:'85.0°C'})]}));
   assert.match(allText(doc.getElementById('resource-report-list')),/동시 관측: Synthetic AI.*발열 원인 미확인/);
+});
+test('shared GPU task context is a separate observation and is literal text',()=>{
+  const doc=fixture();renderWarningHistory(doc,data({events:[event({task:'공유 GPU 화면 처리 · 대화별 구분 불가',context:'예시 제작 <img> — 파일 수정: voice.py'})]}));
+  assert.match(allText(doc.getElementById('resource-report-list')),/동시 작업\(원인 확정 아님\): 예시 제작 <img>/);
+});
+test('older DWM and voice-design records are readable without altering historical facts',()=>{
+  const doc=fixture();renderWarningHistory(doc,data({events:[event({program:'dwm',task:'dwm · 세부 작업 미확인'}),
+    event({program:'MY SIA · 마린 음성 제작',task:'vd_design.py'})]}));
+  const text=allText(doc.getElementById('resource-report-list'));
+  assert.match(text,/Windows 화면 표시 · 작업: 열린 창과 화면 효과를 모니터에 표시/);
+  assert.match(text,/새 목소리 만들기 \(Qwen VoiceDesign\)/);
+  assert.doesNotMatch(text,/세부 작업 미확인|vd_design.py|프로그램: dwm/);
 });
 test('a connection error preserves already displayed history',async()=>{
   const doc=fixture();let fail=false;

@@ -49,6 +49,33 @@ class WarningHistoryTests(unittest.TestCase):
         self.assertEqual(observed_activity({}, group, 'disk')['task'], 'writer.py')
         self.assertEqual(observed_activity({}, None, 'gpu')['program'], '미확인')
 
+    def test_claude_shared_gpu_does_not_assign_a_conversation_as_cause(self):
+        context = {'title': '예시 음성 제작', 'operation': '파일 수정: voice.py 진행', 'observed_at': 999}
+        group = {'name': 'Claude', 'processes': [
+            {'pid': 1, 'gpu_pct': 80, 'process_role': 'gpu-process'},
+            {'pid': 2, 'gpu_pct': None, 'cpu_pct': 50, 'task_context': context}]}
+        gpu = observed_activity({'ts': 1000}, group, 'gpu')
+        self.assertIn('공유 GPU', gpu['task'])
+        self.assertIn('대화별 구분 불가', gpu['task'])
+        self.assertIn('예시 음성 제작', gpu['context'])
+        self.assertNotIn('context', observed_activity({'ts': 1031}, group, 'gpu'))
+        cpu = observed_activity({'ts': 1000}, group, 'cpu')
+        self.assertEqual(cpu['task'], '예시 음성 제작 · 파일 수정: voice.py 진행')
+
+    def test_windows_engine_name_is_used_without_losing_engine_identity(self):
+        group = {'name': 'Synthetic Worker', 'gpu_engine': 'luid_x_phys_0_eng_0', 'gpu_engine_name': 'Compute_0'}
+        self.assertEqual(observed_activity({}, group, 'gpu')['task'], 'GPU 연산')
+
+    def test_windows_and_verified_voice_script_have_plain_task_names(self):
+        windows = {'name': 'dwm', 'gpu_engine_name': '3D', 'processes': [{'name': 'dwm'}]}
+        result = observed_activity({}, windows, 'gpu')
+        self.assertEqual(result['program'], 'Windows 화면 표시')
+        self.assertEqual(result['task'], '열린 창과 화면 효과를 모니터에 표시')
+        voice = {'name': 'MY SIA · 마린 음성 제작', 'processes': [{'script': 'vd_design.py', 'gpu_pct': 80}]}
+        self.assertEqual(observed_activity({}, voice, 'gpu')['task'], '새 목소리 만들기 (Qwen VoiceDesign)')
+        voice['name'] = 'Unrelated App'
+        self.assertEqual(observed_activity({}, voice, 'gpu')['task'], 'vd_design.py')
+
     def test_saved_task_follows_peak_and_is_not_replaced_by_current_work(self):
         first = snapshot(1000, 75)
         first['groups'][0]['processes'] = [{'script': 'render.py', 'cpu_pct': 50}]

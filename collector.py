@@ -12,6 +12,7 @@ from gpu_metrics import GpuSampler
 from process_metrics import ProcessSampler
 from temperature_metrics import TemperatureSampler
 from system_metrics import SystemInfoSampler, DiskActivitySampler
+from task_context import TaskContext, process_role
 
 SAMPLE_INTERVAL_S = 1.0
 
@@ -19,6 +20,8 @@ SAMPLE_INTERVAL_S = 1.0
 def classify(name, exe='', command=()):
     # Arguments are inspected locally for identity only. Never retain/export them.
     n = name.lower()
+    if n in ('dwm', 'explorer', 'claude', 'codex', 'chatgpt', 'chrome', 'msedge', 'taskmgr'):
+        n += '.exe'  # PDH may return a process name without its extension.
     joined = ' '.join(command).lower().replace('/', '\\')
     path = exe.lower().replace('/', '\\')
     if 'resource-analyzer' in joined or n == 'resourceanalyzer.exe':
@@ -44,7 +47,7 @@ def classify(name, exe='', command=()):
     if n == 'taskmgr.exe':
         return 'task-manager', 'Windows 작업 관리자', 'system'
     if n == 'dwm.exe':
-        return 'desktop-compositor', 'Windows 화면 합성', 'system'
+        return 'desktop-compositor', 'Windows 화면 표시', 'system'
     if n in ('system', 'registry', 'memory compression', 'secure system'):
         return 'windows-core', 'Windows 핵심 시스템', 'system'
     project = re.search(r'\\(?:rigoon_github|github|repos|projects)\\([^\\\s]+)', joined)
@@ -74,6 +77,7 @@ class Collector:
         self.disk_activity = DiskActivitySampler()
         self.previous = {}
         self.metadata = {}
+        self.task_context = TaskContext()
         self.last_tick = time.monotonic()
         self.last_disk = psutil.disk_io_counters()
         self.last_partitions = 0
@@ -126,11 +130,12 @@ class Collector:
                     denied += 1
                 scripts = [Path(x).name for x in command if x.lower().endswith(('.py', '.js', '.mjs', '.ps1'))]
                 meta = {'label': classify(name, exe, command), 'script': scripts[-1] if scripts else '',
-                        'name': name, 'created_at': created_at}
+                        'name': name, 'created_at': created_at, 'process_role': process_role(name, command)}
                 self.metadata[identity] = meta
             processes[pid] = {
                 'pid': pid, 'created_at': meta['created_at'], 'ppid': raw.get('ppid'), 'name': meta['name'],
                 'label': meta['label'], 'script': meta['script'],
+                'process_role': meta['process_role'],
                 'cpu_pct': round(min(100, max(0, raw.get('cpu_pct') or 0)), 2),
                 'ram_gb': round(raw.get('ram_gb') or 0, 4),
                 'gpu_pct': gpu_processes.get(pid, {}).get('gpu_pct') if gpu_available else None,
@@ -145,6 +150,7 @@ class Collector:
                 parent = processes.get(row['ppid'])
                 if parent and row['label'][2] == 'process' and parent['label'][2] in inheritable:
                     row['label'] = parent['label']
+        self.task_context.attach(processes, ts)
         groups = {}
         for row in processes.values():
             key, name, kind = row.pop('label')
@@ -160,6 +166,9 @@ class Collector:
         for group in groups.values():
             if gpu_available and any(p in gpu_processes for p in group['pids']):
                 group['gpu_pct'], group['gpu_engine'] = aggregate_gpu([gpu_processes.get(p, {}) for p in group['pids']])
+                group['gpu_engine_name'] = next((engine.get('name', '') for pid in group['pids']
+                    for engine in gpu_processes.get(pid, {}).get('engines', [])
+                    if engine.get('key') == group['gpu_engine']), '')
             for field in ('cpu_pct', 'ram_gb', 'io_read_mbps', 'io_write_mbps'):
                 group[field] = round(group[field], 3)
             group['processes'].sort(key=lambda p: (p['gpu_pct'] or 0, p['cpu_pct'], p['ram_gb']), reverse=True)

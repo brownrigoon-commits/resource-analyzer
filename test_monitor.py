@@ -52,6 +52,10 @@ class MonitorTests(unittest.TestCase):
     def test_no_rea_substring_false_positive(self):
         self.assertNotEqual(classify('python.exe', command=['create.py'])[0], 'rea')
 
+    def test_pdh_dwm_without_extension_has_plain_windows_identity(self):
+        self.assertEqual(classify('dwm'), ('desktop-compositor', 'Windows 화면 표시', 'system'))
+        self.assertEqual(classify('dwm.exe'), classify('dwm'))
+
     def test_csv_formula_is_escaped(self):
         self.assertEqual(csv_safe('=1+1'), "'=1+1")
         self.assertEqual(csv_safe('normal'), 'normal')

@@ -6,6 +6,7 @@ import sqlite3
 import threading
 
 from app_paths import bundle_dir
+from task_labels import friendly_program, friendly_task
 
 # A JSON object with an ES-module prefix gives Python and the browser one set of rules.
 _rules = (bundle_dir() / 'static' / 'resource-rules.mjs').read_text(encoding='utf-8').strip()
@@ -42,10 +43,30 @@ def observed_activity(snapshot, group, resource):
                   and abs(p['created_at'] - workload['owner_created']) < .01), None)
     if owner and workload.get('stage') in STAGES:
         task = STAGES[workload['stage']]
+    elif resource == 'gpu' and process.get('process_role') == 'gpu-process':
+        # Electron's GPU process serves many conversations; do not call one the cause.
+        task = '공유 GPU 화면 처리 · 대화별 구분 불가'
+        contexts = {}
+        for candidate in processes:
+            context = candidate.get('task_context') or {}
+            observed = context.get('observed_at')
+            if context.get('title') and finite(observed) and finite(snapshot.get('ts')) and 0 <= snapshot['ts'] - observed <= 30:
+                contexts[context['title']] = context.get('operation') or '작업 진행'
+        if contexts:
+            entries = sorted(contexts.items())
+            text = ' / '.join(f'{title} — {operation}' for title, operation in entries[:2])
+            return {'program': group.get('name') or '이름 미확인', 'task': task,
+                    'context': text + (f' 외 {len(entries)-2}건' if len(entries) > 2 else '')}
+    elif process.get('task_context'):
+        context = process['task_context']
+        detail = friendly_task(group.get('name') or '', process.get('script') or '') or context.get('operation')
+        task = context['title'] + (' · ' + detail if detail else ' 작업')
     elif process.get('script'):
         task = process['script']
+    elif process.get('process_role') in ('renderer', 'gpu-process'):
+        task = '앱 화면과 그래픽 처리'
     elif resource == 'gpu':
-        engine = str(group.get('gpu_engine') or '').lower()
+        engine = str(group.get('gpu_engine_name') or group.get('gpu_engine') or '').lower()
         task = next((label for key, label in [('videoencode', '영상 인코딩'), ('videodecode', '영상 디코딩'),
                     ('compute', 'GPU 연산'), ('cuda', 'GPU 연산'), ('3d', '3D 렌더링'), ('copy', 'GPU 데이터 전송')]
                      if key in engine.replace('_', '').replace(' ', '')), '세부 작업 미확인')
@@ -53,7 +74,8 @@ def observed_activity(snapshot, group, resource):
         task = '세부 작업 미확인'
     if task == '세부 작업 미확인' and process.get('name'):
         task = process['name'] + ' · 세부 작업 미확인'
-    return {'program': group.get('name') or '이름 미확인', 'task': task}
+    program = group.get('name') or '이름 미확인'
+    return {'program': friendly_program(program), 'task': friendly_task(program, task)}
 
 
 def warning_reports(snapshot):
@@ -104,7 +126,7 @@ def warning_reports(snapshot):
         cause = str(top[0].get('id') or top[0].get('name')) if top else ''
         activity = observed_activity(snapshot, top[0] if top else None, key)
         activities[key] = activity
-        cause += '|' + activity['task']
+        cause += '|' + activity['task'] + '|' + activity.get('context', '')
         if key == 'gpu':
             cause += '|' + str(gpu.get('name', ''))
         add(key + '-usage', NAMES[key] + (' 활동률' if key == 'disk' else ' 사용률'), value,

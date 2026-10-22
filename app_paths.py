@@ -7,7 +7,7 @@ import sys
 
 APP_ID = 'resource-analyzer'
 APP_NAME = '자원 분석기'
-VERSION = '0.6.3'
+VERSION = '0.6.4'
 
 
 def bundle_dir() -> Path:
