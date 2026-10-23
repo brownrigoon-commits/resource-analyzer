@@ -56,14 +56,14 @@ def port_busy(port):
 
 
 @contextmanager
-def launch_lock(directory, port):
+def launch_lock(directory, port, timeout=30):
     """Serialize launchers, without retaining a PID that could be reused."""
     lock = (directory / f'launcher-{port}.lock').open('a+b')
     lock.seek(0)
     if not lock.read(1):
         lock.write(b'0')
         lock.flush()
-    deadline = time.monotonic() + 30
+    deadline = time.monotonic() + timeout
     while True:
         try:
             lock.seek(0)
@@ -100,7 +100,36 @@ def server_args(args):
         result.append('--autostart')
     if args.stop:
         result.append('--stop')
+    if getattr(args, 'supervision_session', None):
+        result += ['--supervision-session', args.supervision_session]
     return result
+
+
+def background_command(role, args):
+    if getattr(sys, 'frozen', False):
+        return [sys.executable, role, *server_args(args)]
+    return [sys.executable, str(Path(__file__).resolve()), role, *server_args(args)]
+
+
+def background_process(command, directory, log):
+    environment = dict(os.environ)
+    if getattr(sys, 'frozen', False):
+        environment['PYINSTALLER_RESET_ENVIRONMENT'] = '1'
+    flags = 0
+    if os.name == 'nt':
+        flags = subprocess.CREATE_NO_WINDOW | subprocess.CREATE_NEW_PROCESS_GROUP
+    options = dict(cwd=str(directory), env=environment, stdin=subprocess.DEVNULL,
+                   stdout=log, stderr=log, creationflags=flags, close_fds=True)
+    if os.name == 'nt':
+        try:
+            # A desktop monitor should outlive the shell/editor that launched it.
+            return subprocess.Popen(command, **{**options,
+                'creationflags': flags | subprocess.CREATE_BREAKAWAY_FROM_JOB})
+        except OSError as error:
+            if error.winerror != 5:
+                raise
+            logging.info('Launcher job does not permit independent child creation; using normal background launch')
+    return subprocess.Popen(command, **options)
 
 
 def serve(args):
@@ -118,22 +147,9 @@ def launch(args, directory):
                 raise RuntimeError(
                     f'{args.port} 포트를 다른 프로그램이 사용 중입니다. '
                     '그 프로그램을 확인하거나 다른 --port 번호로 실행해 주세요.')
-            if getattr(sys, 'frozen', False):
-                command = [sys.executable, '--serve', *server_args(args)]
-            else:
-                command = [sys.executable, str(Path(__file__).resolve()),
-                           '--serve', *server_args(args)]
-            environment = dict(os.environ)
-            if getattr(sys, 'frozen', False):
-                # Required for an independent onefile child that outlives us.
-                environment['PYINSTALLER_RESET_ENVIRONMENT'] = '1'
-            flags = 0
-            if os.name == 'nt':
-                flags = subprocess.CREATE_NO_WINDOW | subprocess.CREATE_NEW_PROCESS_GROUP
+            command = background_command('--supervise', args)
             with (directory / 'server.log').open('ab') as log:
-                process = subprocess.Popen(command, cwd=str(directory), env=environment,
-                                           stdin=subprocess.DEVNULL, stdout=log, stderr=log,
-                                           creationflags=flags, close_fds=True)
+                process = background_process(command, directory, log)
             deadline = time.monotonic() + 30
             while not health(args.port):
                 if process.poll() is not None:
@@ -150,6 +166,8 @@ def main():
     parser = argparse.ArgumentParser(description=f'{APP_NAME} — 로컬 PC 사용량 분석')
     parser.add_argument('--version', action='version', version=f'{APP_NAME} {VERSION}')
     parser.add_argument('--serve', action='store_true', help=argparse.SUPPRESS)
+    parser.add_argument('--supervise', action='store_true', help=argparse.SUPPRESS)
+    parser.add_argument('--supervision-session', help=argparse.SUPPRESS)
     parser.add_argument('--port', type=int, default=7442)
     parser.add_argument('--data-dir', help='기록과 로그를 저장할 폴더')
     parser.add_argument('--autostart', action='store_true', help='수집도 즉시 시작')
@@ -176,6 +194,9 @@ def main():
         if args.apply_update:
             from updater import apply_update
             return apply_update(args, directory)
+        if args.supervise:
+            from supervisor import supervise
+            return supervise(args, directory)
         if args.serve or args.stop:
             return serve(args)
         return launch(args, directory)
@@ -184,11 +205,13 @@ def main():
         message = f'{APP_NAME}\n\n{error}'
         if sys.stderr:
             print(message, file=sys.stderr)
-        if os.name == 'nt' and not args.no_browser and not args.serve:
+        if os.name == 'nt' and not args.no_browser and not args.serve and not args.supervise:
             import ctypes
             ctypes.windll.user32.MessageBoxW(None, message, APP_NAME, 0x10)
         return 1
 
 
 if __name__ == '__main__':
+    import multiprocessing
+    multiprocessing.freeze_support()
     raise SystemExit(main())

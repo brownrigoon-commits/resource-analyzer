@@ -22,6 +22,7 @@ governor.json
 governor.lock
 launcher-*.lock
 monitor.pid
+collection-intent.json
 /ipc/
 
 # Local validation artifacts and captured screens

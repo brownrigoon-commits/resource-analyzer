@@ -6,6 +6,8 @@ import csv
 from datetime import datetime
 import io
 import json
+import logging
+from logging.handlers import RotatingFileHandler
 import os
 import secrets
 import sys
@@ -14,15 +16,29 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
-from collector import Collector, SAMPLE_INTERVAL_S
+from collector import SAMPLE_INTERVAL_S
+from sampling_worker import IsolatedCollector as Collector
 from history import History, mean, gpu_value
 from app_paths import APP_ID, VERSION, bundle_dir, state_dir
 from governor import Governor
 from resource_ipc import LocalIPC
 from warning_history import WarningHistory
+from runtime_state import write_intent
 
 ROOT = bundle_dir()
 STATIC = ROOT / 'static'
+LOG = logging.getLogger('resource-analyzer.runtime')
+SUMMARY_INTERVAL_S = 15
+
+
+def history_frame(sample):
+    """History aggregation never needs process lists, task logs or sensor payloads."""
+    fields = ('id', 'name', 'cpu_pct', 'ram_gb', 'gpu_pct', 'io_read_mbps', 'io_write_mbps')
+    system = sample['system']
+    return {'ts': sample['ts'], 'sample_duration_s': sample['sample_duration_s'],
+            'system': {key: system.get(key) for key in
+                ('cpu_pct', 'ram_pct', 'disk_read_mbps', 'disk_write_mbps', 'gpus')},
+            'groups': [{key: group.get(key) for key in fields} for group in sample['groups']]}
 
 
 def next_sample_deadline(deadline, completed_at):
@@ -110,12 +126,19 @@ def make_insights(recent, voice):
 
 
 class Monitor:
-    def __init__(self, data):
+    def __init__(self, data, supervision_session=None):
         data.mkdir(parents=True, exist_ok=True)
         self.data = data
         self.history = History(data / 'usage.sqlite3')
         self.warning_history = WarningHistory(data / 'warning-events.sqlite3')
         self.warning_error = None
+        self.storage_error = None
+        self.recovery_attempts = 0
+        self.sampling_worker_pid = None
+        self.dropped_history_samples = 0
+        self.intent_session = supervision_session or secrets.token_hex(16)
+        self.intent_path = data / 'collection-intent.json'
+        self.control_lock = threading.Lock()
         self.lock = threading.Lock()
         self.stop = threading.Event()
         self.latest = None
@@ -123,40 +146,53 @@ class Monitor:
         self.started_at = time.time()
         self.thread = None
         self.collecting = False
+        self.collection_requested = False
         self.recording_stop = threading.Event()
         self.csrf_token = secrets.token_urlsafe(32)
         self.governor = Governor(data)
 
     def start(self):
-        with self.lock:
-            if self.stop.is_set():
-                raise RuntimeError('Service is shutting down')
-            if self.thread and self.thread.is_alive():
-                return
-            self.recording_stop = threading.Event()
-            self.collecting = True
-            self.error = None
-            self.thread = threading.Thread(target=self.run, name='resource-collector', daemon=True)
-            self.thread.start()
+        with self.control_lock:
+            with self.lock:
+                if self.stop.is_set():
+                    raise RuntimeError('Service is shutting down')
+                if self.thread and self.thread.is_alive():
+                    return
+            write_intent(self.intent_path, self.intent_session, True)
+            with self.lock:
+                self.collection_requested = True
+                self.recording_stop = threading.Event()
+                self.collecting = True
+                self.error = None
+                self.thread = threading.Thread(target=self.run, name='resource-collector', daemon=True)
+                self.thread.start()
 
-    def pause(self):
-        self.governor.invalidate('자원 측정이 중지되었습니다')
-        self.recording_stop.set()
-        thread = self.thread
-        if thread:
-            thread.join(timeout=15)
-        with self.lock:
-            self.collecting = bool(thread and thread.is_alive())
+    def pause(self, persist=True):
+        with self.control_lock:
+            if persist:
+                write_intent(self.intent_path, self.intent_session, False)
+                self.collection_requested = False
+            self.governor.invalidate('자원 측정이 중지되었습니다')
+            self.recording_stop.set()
+            thread = self.thread
+            if thread:
+                thread.join(timeout=15)
+            with self.lock:
+                self.collecting = bool(thread and thread.is_alive())
 
     def close(self):
         self.stop.set()
-        self.pause()
+        self.pause(persist=False)
         self.governor.close()
 
     def health(self):
         with self.lock:
             return {'app_id': APP_ID, 'version': VERSION, 'collecting': self.collecting,
-                    'csrf_token': self.csrf_token, 'error': self.error}
+                    'collection_requested': self.collection_requested,
+                    'csrf_token': self.csrf_token, 'error': self.error,
+                    'recovery_attempts': self.recovery_attempts, 'sampling_worker_pid': self.sampling_worker_pid,
+                    'storage_error': self.storage_error, 'dropped_history_samples': self.dropped_history_samples,
+                    'sample_age_s': max(0, time.time() - self.latest['ts']) if self.latest else None}
 
     def pause_warning_history(self, reason):
         try:
@@ -173,19 +209,29 @@ class Monitor:
 
     def run(self):
         collector = None
-        pending = []
+        pending = collections.deque(maxlen=60)
         recent = collections.deque(maxlen=900)
         last_record = time.monotonic()
         last_sample = time.monotonic()
+        cached_stats = {'started_at': None, 'samples': 0, 'duration_minutes': 0}
+        failures = 0
         try:
-            collector = Collector()
-            last_sample = time.monotonic()
+            try:
+                cached_stats = self.history.stats()
+            except Exception as error:
+                self.storage_error = type(error).__name__ + ': ' + str(error)[:160]
             deadline = last_sample + SAMPLE_INTERVAL_S
             while not self.recording_stop.wait(max(0, deadline - time.monotonic())):
                 if self.stop.is_set():
                     break
                 begin = time.monotonic()
                 try:
+                    if collector is None:
+                        collector = Collector(cancel_event=self.recording_stop)
+                        self.sampling_worker_pid = collector.pid
+                        last_sample = time.monotonic()
+                        begin = last_sample
+                        LOG.info('Telemetry worker ready pid=%s', collector.pid)
                     workload_before = self.governor.status().get('active')
                     sample = collector.sample()
                     if workload_before:
@@ -196,7 +242,7 @@ class Monitor:
                     sample['collection_duration_s'] = time.monotonic() - begin
                     last_sample = begin
                     sample['voice'] = voice_status(self.data)
-                    recent.append(sample)
+                    recent.append({'ts': sample['ts'], 'system': sample['system']})
                     sample['insights'] = make_insights(recent, sample['voice'])
                     try:
                         if sample['collection_duration_s'] > 4:
@@ -207,23 +253,45 @@ class Monitor:
                     except Exception as error:
                         self.warning_error = type(error).__name__ + ': ' + str(error)[:160]
                         sample['errors'].append('주의·높음 기록 저장 실패: ' + self.warning_error)
-                    pending.append(sample)
-                    if time.monotonic() - last_record >= 15:
-                        self.history.record(pending)
-                        pending = []
+                    if len(pending) == pending.maxlen:
+                        self.dropped_history_samples += 1
+                    pending.append(history_frame(sample))
+                    if time.monotonic() - last_record >= SUMMARY_INTERVAL_S:
+                        try:
+                            self.history.record(list(pending))
+                            pending.clear()
+                            cached_stats = self.history.stats()
+                            self.storage_error = None
+                        except Exception as error:
+                            self.storage_error = type(error).__name__ + ': ' + str(error)[:160]
+                            LOG.warning('Summary storage temporarily unavailable: %s', self.storage_error)
                         last_record = time.monotonic()
-                    sample['recording'] = {**self.history.stats(), 'retention_days': 7,
+                    sample['recording'] = {**cached_stats, 'retention_days': 7,
                                            'write_interval_s': 15, 'session_started_at': self.started_at}
                     self.governor.update(sample, observed_at=begin)
                     with self.lock:
                         sample['published_at'] = time.time()
                         self.latest = sample
                         self.error = None
+                    if failures:
+                        LOG.info('Telemetry collection recovered after %s consecutive failures', failures)
+                    failures = 0
                 except Exception as error:
+                    if self.recording_stop.is_set() or self.stop.is_set():
+                        break
                     self.pause_warning_history('measurement_gap')
                     self.governor.invalidate('자원 수집 오류로 새 작업을 기다립니다')
                     with self.lock:
-                        self.error = type(error).__name__ + ': ' + str(error)[:160]
+                        self.error = '측정 엔진 자동 복구 중: ' + type(error).__name__ + ': ' + str(error)[:160]
+                        self.recovery_attempts += 1
+                    LOG.warning('Telemetry failure; restarting only the sampler', exc_info=True)
+                    if collector is not None:
+                        collector.close()
+                        collector = None
+                    self.sampling_worker_pid = None
+                    failures += 1
+                    if self.recording_stop.wait(min(30, 2 ** min(failures - 1, 5))):
+                        break
                 finally:
                     deadline = next_sample_deadline(deadline, time.monotonic())
         except Exception as error:
@@ -233,12 +301,19 @@ class Monitor:
         finally:
             self.pause_warning_history('collection_stopped')
             self.governor.invalidate('자원 수집이 종료되었습니다')
-            if pending:
-                self.history.record(pending)
-            if collector:
-                collector.close()
-            with self.lock:
-                self.collecting = False
+            try:
+                if pending:
+                    try:
+                        self.history.record(list(pending))
+                    except Exception:
+                        LOG.warning('Could not flush remaining summaries', exc_info=True)
+                if collector:
+                    collector.close()
+            finally:
+                with self.lock:
+                    self.collecting = False
+                    self.sampling_worker_pid = None
+                LOG.info('Collection thread stopped')
 
     def snapshot(self):
         with self.lock:
@@ -248,6 +323,10 @@ class Monitor:
             result['errors'] = list(result['errors'])
             if self.error:
                 result['errors'].append('수집 일시 중단: ' + self.error)
+            if self.storage_error:
+                result['errors'].append('요약 기록 저장 재시도 중: ' + self.storage_error)
+            if self.dropped_history_samples:
+                result['errors'].append(f'저장 지연 중 요약 표본 {self.dropped_history_samples}개 보관 한도 초과')
             result['stale'] = time.time() - result['ts'] > 4
             result['collecting'] = self.collecting
             return result, 200
@@ -274,7 +353,11 @@ def make_handler(monitor, port):
             if disposition:
                 self.send_header('Content-Disposition', disposition)
             self.end_headers()
-            self.wfile.write(data)
+            try:
+                self.wfile.write(data)
+            except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+                # Browser refresh/closed tabs are not service failures.
+                pass
 
         def do_GET(self):
             if self.headers.get('Host', '') not in (f'127.0.0.1:{port}', f'localhost:{port}'):
@@ -405,6 +488,7 @@ def main():
     parser.add_argument('--stop', action='store_true')
     parser.add_argument('--data-dir', type=Path)
     parser.add_argument('--autostart', action='store_true')
+    parser.add_argument('--supervision-session', help=argparse.SUPPRESS)
     args = parser.parse_args()
     data = state_dir(args.data_dir)
     data.mkdir(parents=True, exist_ok=True)
@@ -413,7 +497,13 @@ def main():
         if sys.stdout is not None:
             print('Resource monitor will stop and flush history within a few seconds.')
         return
-    monitor = Monitor(data)
+    handler = RotatingFileHandler(data / 'runtime.log', maxBytes=1024 * 1024, backupCount=3, encoding='utf-8')
+    handler.setFormatter(logging.Formatter('%(asctime)s %(levelname)s %(message)s'))
+    LOG.addHandler(handler)
+    LOG.setLevel(logging.INFO)
+    LOG.propagate = False
+    LOG.info('Service starting version=%s pid=%s', VERSION, os.getpid())
+    monitor = Monitor(data, supervision_session=args.supervision_session)
     server = ThreadingHTTPServer(('127.0.0.1', args.port), make_handler(monitor, args.port))
     ipc = LocalIPC(monitor.governor, data, monitor.csrf_token, VERSION)
     try:
@@ -444,6 +534,9 @@ def main():
         monitor.close()
         server.server_close()
         (data / 'monitor.pid').unlink(missing_ok=True)
+        LOG.info('Service stopped')
+        LOG.removeHandler(handler)
+        handler.close()
 
 
 if __name__ == '__main__':

@@ -29,7 +29,7 @@ def apply_update(args, directory):
         if current.get('version') == VERSION and any(
                 item.get('stage') == 'qwen-vision' for item in governor.get('adapters', [])):
             return entrypoint.launch(args, directory)
-        args.autostart = bool(current.get('collecting'))
+        args.autostart = bool(current.get('collection_requested', current.get('collecting')))
         args.stop = True
         try:
             result = entrypoint.serve(args)
