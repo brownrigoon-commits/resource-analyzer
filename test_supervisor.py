@@ -67,6 +67,17 @@ class SupervisorTests(unittest.TestCase):
         path.write_text('{broken')
         self.assertFalse(read_intent(path, 'new-session', False))
 
+    def test_stop_requested_at_retry_boundary_prevents_another_start(self):
+        child = Mock(pid=1)
+        child.wait.return_value = 17
+        self.spawn.return_value = child
+        def stopping(path, delay):
+            path.write_text('explicit stop at restart boundary')
+            return False
+        self.wait.side_effect = stopping
+        watch_server(self.args, self.root)
+        self.assertEqual(self.spawn.call_count, 1)
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -42,6 +42,8 @@ def watch_server(args, directory):
     args.supervision_session = uuid.uuid4().hex
     failures = 0
     while True:
+        if stop_file.exists():
+            return 0
         # A server started by someone else must never be replaced.
         if entrypoint.port_busy(args.port):
             LOG.info('Port already occupied; supervisor exits without touching it')

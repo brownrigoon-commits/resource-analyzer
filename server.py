@@ -519,7 +519,8 @@ def main():
         server.server_close()
         monitor.close()
         raise
-    (data / 'STOP').unlink(missing_ok=True)
+    if not args.supervision_session:
+        (data / 'STOP').unlink(missing_ok=True)
     (data / 'monitor.pid').write_text(str(os.getpid()), encoding='ascii')
     if args.autostart or monitor.governor.status()['enabled']:
         monitor.start()
