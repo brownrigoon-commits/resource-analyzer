@@ -11,6 +11,7 @@
 *.db
 *.db-*
 *.log
+*.log.*
 *.csv
 *.env
 .env.*

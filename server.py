@@ -24,6 +24,7 @@ from governor import Governor
 from resource_ipc import LocalIPC
 from warning_history import WarningHistory
 from runtime_state import write_intent
+from temperature_metrics import TemperatureSampler
 
 ROOT = bundle_dir()
 STATIC = ROOT / 'static'
@@ -209,6 +210,7 @@ class Monitor:
 
     def run(self):
         collector = None
+        temperatures = None
         pending = collections.deque(maxlen=60)
         recent = collections.deque(maxlen=900)
         last_record = time.monotonic()
@@ -216,6 +218,7 @@ class Monitor:
         cached_stats = {'started_at': None, 'samples': 0, 'duration_minutes': 0}
         failures = 0
         try:
+            temperatures = TemperatureSampler()
             try:
                 cached_stats = self.history.stats()
             except Exception as error:
@@ -227,8 +230,10 @@ class Monitor:
                 begin = time.monotonic()
                 try:
                     if collector is None:
-                        collector = Collector(cancel_event=self.recording_stop)
+                        collector = Collector(cancel_event=self.recording_stop, temperature_sampler=temperatures)
                         self.sampling_worker_pid = collector.pid
+                        if self.recording_stop.wait(SAMPLE_INTERVAL_S):
+                            break
                         last_sample = time.monotonic()
                         begin = last_sample
                         LOG.info('Telemetry worker ready pid=%s', collector.pid)
@@ -310,6 +315,8 @@ class Monitor:
                 if collector:
                     collector.close()
             finally:
+                if temperatures is not None:
+                    temperatures.close()
                 with self.lock:
                     self.collecting = False
                     self.sampling_worker_pid = None

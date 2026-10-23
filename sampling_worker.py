@@ -4,62 +4,85 @@ import json
 import multiprocessing as mp
 import os
 import struct
+import threading
 import time
 
 from temperature_metrics import TemperatureSampler
 
 PAYLOAD_LIMIT = 8 * 1024 * 1024
+PHASES = ('starting', 'initializing', 'system', 'gpu', 'process-counters', 'process-details', 'process-fallback',
+          'task-context', 'disk-capacity', 'inventory', 'publishing', 'waiting')
 
 
-def run_worker(buffer, requested, ready, stopping, factory=None):
+def run_worker(buffer, requested, ready, stopping, phase, factory=None):
     # The parent retains its sensor connection; restarting this process must not
     # repeatedly request administrator approval for the temperature helper.
     os.environ['RESOURCE_ANALYZER_DISABLE_SENSORS'] = '1'
     collector = None
+    parent = mp.parent_process()
+    if parent is not None:
+        def follow_parent():
+            while not stopping.value:
+                if not parent.is_alive():
+                    os._exit(0)
+                time.sleep(.2)
+        threading.Thread(target=follow_parent, name='sampling-parent-watch', daemon=True).start()
 
-    def publish(value):
+    def publish(value, sequence):
+        phase.value = PHASES.index('publishing')
         payload = json.dumps(value, ensure_ascii=False, allow_nan=False).encode('utf-8')
         if len(payload) > PAYLOAD_LIMIT:
             payload = b'{"error":"Telemetry response exceeded its size limit"}'
         view = memoryview(buffer).cast('B')
         view[4:4 + len(payload)] = payload
         struct.pack_into('<I', view, 0, len(payload))
-        ready.set()
+        ready.value = sequence
+        phase.value = PHASES.index('waiting')
 
     try:
         if factory is None:
             from collector import Collector
-            factory = Collector
-        collector = factory()
-        publish({'ready': True})
-        while not stopping.is_set():
-            if not requested.wait(.2):
+            collector = Collector(progress=lambda stage: setattr(phase, 'value', PHASES.index(stage)))
+        else:
+            collector = factory()
+        sequence = 0
+        publish({'ready': True}, sequence)
+        while not stopping.value:
+            if requested.value == sequence:
+                time.sleep(.02)
                 continue
-            requested.clear()
-            if stopping.is_set():
+            sequence = requested.value
+            if stopping.value:
                 break
             try:
-                publish({'sample': collector.sample()})
+                publish({'sample': collector.sample()}, sequence)
             except Exception as error:
-                publish({'error': type(error).__name__ + ': ' + str(error)[:160]})
+                publish({'error': type(error).__name__ + ': ' + str(error)[:160]}, sequence)
     except Exception as error:
-        publish({'error': type(error).__name__ + ': ' + str(error)[:160]})
+        publish({'error': type(error).__name__ + ': ' + str(error)[:160]}, 0)
     finally:
         if collector is not None:
             collector.close()
 
 
 class IsolatedCollector:
-    def __init__(self, factory=None, startup_timeout=45, sample_timeout=15, sensors=True, cancel_event=None):
+    def __init__(self, factory=None, startup_timeout=45, sample_timeout=15, sensors=True, cancel_event=None, temperature_sampler=None):
         context = mp.get_context('spawn')
         self.buffer = context.RawArray(ctypes.c_ubyte, PAYLOAD_LIMIT + 4)
-        self.requested, self.ready, self.stopping = context.Event(), context.Event(), context.Event()
+        # Lock-free aligned 32-bit counters on Windows x64. A terminated child
+        # cannot strand an interprocess Event/Condition mutex in its locked state.
+        self.requested = context.Value(ctypes.c_uint32, 0, lock=False)
+        self.ready = context.Value(ctypes.c_uint32, 0xffffffff, lock=False)
+        self.stopping = context.Value(ctypes.c_uint32, 0, lock=False)
+        self.sequence = 0
+        self.phase = context.Value(ctypes.c_int, 0, lock=False)
         self.timeout = sample_timeout
         self.cancel_event = cancel_event
         self.closed = False
-        self.temperatures = TemperatureSampler(autostart=sensors)
+        self.owns_temperatures = temperature_sampler is None
+        self.temperatures = temperature_sampler if temperature_sampler is not None else TemperatureSampler(autostart=sensors)
         self.process = context.Process(target=run_worker, name='resource-sampling-worker',
-            args=(self.buffer, self.requested, self.ready, self.stopping, factory), daemon=True)
+            args=(self.buffer, self.requested, self.ready, self.stopping, self.phase, factory), daemon=True)
         try:
             self.process.start()
             value = self.receive(startup_timeout)
@@ -75,15 +98,17 @@ class IsolatedCollector:
 
     def receive(self, timeout):
         # The producer publishes a complete bounded shared-memory message before
-        # setting ready. A crash midway through a message cannot block a pipe read.
+        # committing its sequence. One outstanding request keeps the buffer
+        # immutable while the parent reads it; crashes cannot strand a mutex.
         deadline = time.monotonic() + timeout
-        while not self.ready.wait(min(.2, max(0, deadline - time.monotonic()))):
+        while self.ready.value != self.sequence:
             if self.cancel_event is not None and self.cancel_event.is_set():
                 raise InterruptedError('Telemetry collection was stopped')
             if self.process.exitcode is not None:
                 raise RuntimeError(f'Telemetry worker exited ({self.process.exitcode})')
             if time.monotonic() >= deadline:
-                raise TimeoutError('Telemetry worker stopped responding')
+                raise TimeoutError('Telemetry worker stopped responding: ' + PHASES[self.phase.value])
+            time.sleep(min(.02, max(0, deadline - time.monotonic())))
         size = struct.unpack_from('<I', self.buffer)[0]
         if not 0 < size <= PAYLOAD_LIMIT:
             raise RuntimeError('Invalid telemetry message length')
@@ -97,8 +122,8 @@ class IsolatedCollector:
     def sample(self):
         if self.closed:
             raise RuntimeError('Telemetry worker is closed')
-        self.ready.clear()
-        self.requested.set()
+        self.sequence = (self.sequence + 1) % 0xffffffff
+        self.requested.value = self.sequence
         sample = self.receive(self.timeout).get('sample')
         if not isinstance(sample, dict):
             raise RuntimeError('Telemetry worker returned no sample')
@@ -108,8 +133,7 @@ class IsolatedCollector:
     def close(self):
         if self.closed:
             return
-        self.stopping.set()
-        self.requested.set()
+        self.stopping.value = 1
         try:
             if self.process.pid is not None:
                 self.process.join(timeout=1)
@@ -122,4 +146,5 @@ class IsolatedCollector:
                     raise RuntimeError('Telemetry worker shutdown is still pending')
             self.closed = True
         finally:
-            self.temperatures.close()
+            if self.owns_temperatures:
+                self.temperatures.close()

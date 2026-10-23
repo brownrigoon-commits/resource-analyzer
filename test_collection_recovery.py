@@ -40,6 +40,7 @@ class CollectionRecoveryTests(unittest.TestCase):
         patch('server.SAMPLE_INTERVAL_S', .01).start()
         patch('server.SUMMARY_INTERVAL_S', .03).start()
         patch('server.LOG').start()
+        patch('server.TemperatureSampler').start()
 
     def wait(self, predicate, timeout=5):
         deadline = time.monotonic() + timeout

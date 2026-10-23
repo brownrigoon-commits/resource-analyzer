@@ -72,6 +72,8 @@ def observed_activity(snapshot, group, resource):
                      if key in engine.replace('_', '').replace(' ', '')), '세부 작업 미확인')
     else:
         task = '세부 작업 미확인'
+    if task == '세부 작업 미확인' and process.get('metadata_pending'):
+        task = '작업 정보 확인 중'
     if task == '세부 작업 미확인' and process.get('name'):
         task = process['name'] + ' · 세부 작업 미확인'
     program = group.get('name') or '이름 미확인'

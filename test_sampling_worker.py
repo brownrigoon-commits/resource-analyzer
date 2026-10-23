@@ -2,6 +2,7 @@ import os
 import threading
 import time
 import unittest
+from unittest.mock import Mock
 
 from sampling_worker import IsolatedCollector
 
@@ -63,9 +64,27 @@ class SamplingWorkerTests(unittest.TestCase):
             collector.sample()
         self.assertEqual(collector.process.exitcode, 17)
 
+    def test_termination_while_idle_cannot_strand_a_synchronization_lock(self):
+        for _ in range(3):
+            collector = self.collector(FakeCollector, sample_timeout=1)
+            collector.sample()
+            collector.process.terminate()
+            collector.process.join(timeout=2)
+            with self.assertRaisesRegex(RuntimeError, 'exited'):
+                collector.sample()
+            collector.close()
+
     def test_initialization_failure_is_reported_and_does_not_leak_a_worker(self):
         with self.assertRaisesRegex(RuntimeError, 'synthetic initialization failure'):
             IsolatedCollector(factory=FailingInitialization, startup_timeout=10, sensors=False)
+
+    def test_restarting_sampler_keeps_the_borrowed_temperature_connection(self):
+        temperatures = Mock()
+        temperatures.sample.return_value = {'cpu': {'temp_c': 42}}
+        collector = self.collector(FakeCollector, temperature_sampler=temperatures)
+        self.assertEqual(collector.sample()['system']['temperatures']['cpu']['temp_c'], 42)
+        collector.close()
+        temperatures.close.assert_not_called()
 
     def test_user_pause_interrupts_a_pending_collection(self):
         cancel = threading.Event()

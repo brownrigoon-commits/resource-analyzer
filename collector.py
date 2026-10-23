@@ -68,8 +68,42 @@ def aggregate_gpu(rows):
     return round(min(100.0, engines[key]), 2), key
 
 
+def process_metadata(pid, name):
+    command, exe, created_at, denied = [], '', None, False
+    try:
+        proc = psutil.Process(pid)
+        with proc.oneshot():
+            created_at = proc.create_time()
+            name, command, exe = proc.name(), proc.cmdline(), proc.exe()
+    except (psutil.AccessDenied, psutil.NoSuchProcess, OSError):
+        denied = True
+    scripts = [Path(x).name for x in command if x.lower().endswith(('.py', '.js', '.mjs', '.ps1'))]
+    return {'label': classify(name, exe, command), 'script': scripts[-1] if scripts else '',
+            'name': name, 'created_at': created_at, 'process_role': process_role(name, command), 'resolved': True}, denied
+
+
+def metadata_batch(readings, gpu_processes, cache, resolver=process_metadata, clock=time.monotonic, budget=.08, limit=12):
+    """Bound cold/resume metadata work; bulk utilization never waits for every PID."""
+    deadline, attempted, denied = clock() + budget, 0, 0
+    result = {}
+    priority = lambda raw: (gpu_processes.get(raw['pid'], {}).get('gpu_pct') or 0, raw.get('cpu_pct') or 0)
+    for raw in sorted(readings, key=priority, reverse=True):
+        pid, name = raw['pid'], raw['name']
+        identity = (pid, raw.get('identity', raw.get('created_at')))
+        meta = cache.get(identity) or {'label': classify(name), 'script': '', 'name': name,
+            'created_at': None, 'process_role': '', 'resolved': False}
+        if not meta['resolved'] and attempted < limit and clock() < deadline:
+            meta, inaccessible = resolver(pid, name)
+            denied += int(inaccessible)
+            attempted += 1
+        result[identity] = meta
+    return result, denied
+
+
 class Collector:
-    def __init__(self):
+    def __init__(self, progress=None):
+        self.progress = progress or (lambda stage: None)
+        self.progress('initializing')
         self.gpu = GpuSampler()
         self.process_sampler = ProcessSampler()
         self.temperatures = TemperatureSampler()
@@ -94,6 +128,7 @@ class Collector:
         self.sample(initializing=True)  # Never enumerate every PID during PDH warmup.
 
     def sample(self, *, initializing=False):
+        self.progress('system')
         now = time.monotonic()
         elapsed = max(.01, now - self.last_tick)
         ts = time.time()
@@ -104,38 +139,32 @@ class Collector:
         if disk and self.last_disk:
             read = max(0, disk.read_bytes - self.last_disk.read_bytes) / elapsed / 1024**2
             write = max(0, disk.write_bytes - self.last_disk.write_bytes) / elapsed / 1024**2
+        self.progress('gpu')
         gpu_data = self.gpu.sample()
         gpu_processes = {int(k): v for k, v in gpu_data.get('processes', {}).items()}
         gpu_available = bool(gpu_data.get('processes_available', gpu_data.get('available')))
         processes = {}
+        self.progress('process-counters')
         process_data = self.process_sampler.sample()
-        readings = (process_data.get('rows', []) if process_data.get('available')
-                    else [] if initializing else self._fallback_processes(elapsed))
-        current = set()
-        denied = 0
+        self.progress('process-details')
+        if process_data.get('available'):
+            readings = process_data.get('rows', [])
+        elif initializing:
+            readings = []
+        else:
+            self.progress('process-fallback')
+            readings = self._fallback_processes(elapsed)
+        self.progress('process-details')
+        self.metadata, denied = metadata_batch(readings, gpu_processes, self.metadata)
         for raw in readings:
             pid = raw['pid']
             identity = (pid, raw.get('identity', raw.get('created_at')))
-            current.add(identity)
-            meta = self.metadata.get(identity)
-            if meta is None:
-                name, command, exe = raw['name'], [], ''
-                created_at = None
-                try:
-                    proc = psutil.Process(pid)
-                    with proc.oneshot():
-                        created_at = proc.create_time()
-                        name, command, exe = proc.name(), proc.cmdline(), proc.exe()
-                except (psutil.AccessDenied, psutil.NoSuchProcess, OSError):
-                    denied += 1
-                scripts = [Path(x).name for x in command if x.lower().endswith(('.py', '.js', '.mjs', '.ps1'))]
-                meta = {'label': classify(name, exe, command), 'script': scripts[-1] if scripts else '',
-                        'name': name, 'created_at': created_at, 'process_role': process_role(name, command)}
-                self.metadata[identity] = meta
+            meta = self.metadata[identity]
             processes[pid] = {
                 'pid': pid, 'created_at': meta['created_at'], 'ppid': raw.get('ppid'), 'name': meta['name'],
                 'label': meta['label'], 'script': meta['script'],
                 'process_role': meta['process_role'],
+                'metadata_pending': not meta['resolved'],
                 'cpu_pct': round(min(100, max(0, raw.get('cpu_pct') or 0)), 2),
                 'ram_gb': round(raw.get('ram_gb') or 0, 4),
                 'gpu_pct': gpu_processes.get(pid, {}).get('gpu_pct') if gpu_available else None,
@@ -150,6 +179,7 @@ class Collector:
                 parent = processes.get(row['ppid'])
                 if parent and row['label'][2] == 'process' and parent['label'][2] in inheritable:
                     row['label'] = parent['label']
+        self.progress('task-context')
         self.task_context.attach(processes, ts)
         groups = {}
         for row in processes.values():
@@ -173,6 +203,7 @@ class Collector:
                 group[field] = round(group[field], 3)
             group['processes'].sort(key=lambda p: (p['gpu_pct'] or 0, p['cpu_pct'], p['ram_gb']), reverse=True)
         if now - self.last_partitions > 15:
+            self.progress('disk-capacity')
             self.disks = []
             for partition in psutil.disk_partitions():
                 try:
@@ -183,8 +214,8 @@ class Collector:
                 except (OSError, PermissionError):
                     pass
             self.last_partitions = now
-        self.metadata = {k: v for k, v in self.metadata.items() if k in current}
         self.last_tick, self.last_disk = now, disk
+        self.progress('inventory')
         return {'ts': ts, 'interval_s': SAMPLE_INTERVAL_S, 'system': {
             'cpu_pct': round(statistics.mean(cpu_cores), 2), 'cpu_threads': self.cpu_threads,
             'cpu_name': self.cpu_name, 'cpu_cores': self.cpu_cores, 'cpu_peak_core_pct': max(cpu_cores),
@@ -199,6 +230,7 @@ class Collector:
         }, 'groups': sorted(groups.values(), key=lambda g: (g['gpu_pct'] or 0, g['cpu_pct'], g['ram_gb']), reverse=True),
             'errors': (gpu_data.get('errors', []) + process_data.get('errors', []))[:4],
             'coverage': {'readable_processes': len(processes), 'unreadable_processes': denied,
+                         'pending_process_metadata': sum(not m['resolved'] for m in self.metadata.values()),
                          'process_gpu_available': gpu_available,
                          'process_bulk_available': bool(process_data.get('available'))}}
 

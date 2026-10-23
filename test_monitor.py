@@ -3,7 +3,7 @@ from pathlib import Path
 import tempfile
 import time
 import unittest
-from collector import aggregate_gpu, classify
+from collector import aggregate_gpu, classify, metadata_batch
 from history import History
 from server import csv_safe, make_insights, next_sample_deadline, stable_workload
 
@@ -18,6 +18,36 @@ def sample(ts, cpu=10, gpu=95, ram=40):
 
 
 class MonitorTests(unittest.TestCase):
+    def test_cold_process_metadata_is_bounded_but_keeps_every_bulk_reading(self):
+        readings = [{'pid': pid, 'name': f'example-{pid}', 'identity': str(pid), 'cpu_pct': pid}
+                    for pid in range(1, 101)]
+        called, clock = [], [0.0]
+        def resolve(pid, name):
+            called.append(pid)
+            clock[0] += .03
+            return {'resolved': True, 'name': name}, False
+        cache, denied = metadata_batch(readings, {1: {'gpu_pct': 90}}, {}, resolver=resolve,
+                                      clock=lambda: clock[0], budget=.05, limit=12)
+        self.assertEqual(called, [1, 100])  # Active GPU/CPU work gets names first.
+        self.assertEqual(len(cache), 100)
+        self.assertEqual(sum(value['resolved'] for value in cache.values()), 2)
+        self.assertEqual(denied, 0)
+        metadata_batch(readings, {}, cache, resolver=resolve, clock=lambda: clock[0], budget=.05, limit=12)
+        self.assertEqual(called[2:], [99, 98])
+
+    def test_process_metadata_limit_and_reused_identity_are_independent(self):
+        readings = [{'pid': p, 'name': 'example', 'identity': 'old', 'cpu_pct': 0} for p in range(1, 30)]
+        calls = []
+        def resolve(pid, name):
+            calls.append(pid)
+            return {'resolved': True}, False
+        cache, _ = metadata_batch(readings, {}, {}, resolver=resolve, clock=lambda: 0, limit=3)
+        self.assertEqual(calls, [1, 2, 3])
+        reused = [{**readings[0], 'identity': 'new'}]
+        cache, _ = metadata_batch(reused, {}, cache, resolver=resolve, clock=lambda: 0, limit=3)
+        self.assertEqual(calls, [1, 2, 3, 1])
+        self.assertNotIn((1, 'old'), cache)
+
     def test_workload_requires_same_live_lease_throughout_sample(self):
         lease = {'stage': 'qwen-vision', 'device': 'cuda', 'owner_pid': 42,
                  'owner_created': 100.0, 'request_id': 'sample-1'}
