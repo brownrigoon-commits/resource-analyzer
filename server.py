@@ -431,7 +431,10 @@ def make_handler(monitor, port):
                 # require a JavaScript MIME type when nosniff is enabled.
                 mime = {'.html': 'text/html', '.css': 'text/css',
                         '.js': 'text/javascript', '.mjs': 'text/javascript'}[Path(name).suffix]
-                self.send((STATIC / name).read_bytes(), mime + '; charset=utf-8')
+                content = (STATIC / name).read_bytes()
+                if mime == 'text/html':
+                    content = content.replace(b'{{APP_VERSION}}', VERSION.encode('ascii'))
+                self.send(content, mime + '; charset=utf-8')
 
         def do_POST(self):
             allowed = (f'127.0.0.1:{port}', f'localhost:{port}')
