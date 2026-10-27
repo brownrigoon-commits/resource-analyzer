@@ -5,7 +5,10 @@
 - Get-Disk의 물리 디스크 번호와 Get-Partition 드라이브 문자를 연결한다. PDH 활동률, psutil PhysicalDrive 전송량, LibreHardwareMonitor /hdd|ssd|nvme/<DriveNumber> 온도를 물리 번호로 연결한다. 동일 모델 두 개, USB 외장 디스크, 여러 드라이브 문자를 지원한다.
 - 장치 인벤토리는 기존 제한 시간 10초의 백그라운드 쿼리에서 60초마다 갱신한다. per-disk I/O는 워밍업·카운터 초기화·분리 후 재연결 때 0 대신 미측정이다. 장치별 실시간 그래프는 브라우저 내 최근 60초이며 기존 저장 기록은 집계 방식 그대로다.
 - 공식 센서 번호 근거: https://github.com/LibreHardwareMonitor/LibreHardwareMonitor/blob/v0.9.6/LibreHardwareMonitorLib/Hardware/Storage/StorageDevice.cs (DriveNumber로 Identifier 생성).
-- 검증 중: 장치 카드 JavaScript 검사 5개 및 기존 JS 19개 통과. 전체 Python 검사에서 변경 전 HEAD에도 재현되는 test_resource_ipc 동시 파일 요청 40개 시험의 응답 제한 시간 오류 1개가 있다. 기능 수정 범위 밖의 기존 시험 실패를 숨기지 않고 별도 기록한다. 최종 배포 검증은 아래 후속 기록에 추가한다.
+- 검증: 관련 Python 61개 및 JavaScript 24개 통과. 전체 Python 검사에서 변경 전 HEAD에도 재현되는 test_resource_ipc 동시 파일 요청 40개 시험의 응답 제한 시간 오류 1개가 있다. 별도 기존 HEAD 사본에서도 같은 실패를 확인했다.
+- 빌드 소스 26490bf, 버전 0.7.0, 실행 파일 SHA-256 `9f22a553d11f232bf663e30a3370160dfd7f06f8c5b0e71f1527276bb0dee5d9`. 동일한 고정 의존성으로 build.ps1을 완료했다. 바탕화면에 버전명 실행 파일과 적용 바로가기를 준비했으며 실행 파일 해시를 대조했다.
+- 적용 전 E 설치 체크포인트 `PC_INSTALL_BACKUPS/resource-analyzer/2026-10-28_05-28-00_81f109`: 67파일, 33,663,507바이트, source bundle 및 크기·SHA-256 verified. E 복원 목차도 추가했다. 이후 최신 문서 백업은 LATEST.txt를 확인한다.
+- 미완료: 자동 승인 검토가 `ResourceAnalyzer.exe --apply-update --autostart --no-browser` 실행을 정책으로 차단했고 세부 이유는 제공하지 않았다. 사용자에게 바탕화면의 0.7.0 적용 파일 직접 실행을 요청했다. 현재 운영 0.6.6을 임의 종료하지 않았으며, 0.7.0 실제 화면·실시간 갱신 확인은 적용 후에 해야 한다.
 
 # 다른 PC·채팅에서 이어서 작업하기
 
