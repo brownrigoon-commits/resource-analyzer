@@ -16,19 +16,7 @@ test('same-model disks use physical drive number, not inventory order or model n
     physical_disk_io:{0:{read_mbps:2,write_mbps:3},1:{read_mbps:10,write_mbps:20}},physical_disk_activity:{0:5,1:90},
     temperatures:{disk:{sensors:[{hardware_id:'/ssd/0',temp_c:25},{hardware_id:'/ssd/1',temp_c:40}]}},
     disks:[{drive:'D:\\',total_gb:500,free_gb:300},{drive:'E:\\',total_gb:500,free_gb:100}]});
-  assert.deepEqual(cards.map(c=>[c.id,c.value,c.temp,c.volumes[0].free]),[['disk-1',30,40,100],['disk-0',5,25,300]]);
-});
-
-test('identical DIMMs use sensor slot identity and do not invent module usage percentages',()=>{
-  const cards=deviceModels({hardware:{memory:[{part:'model',capacity:32*1024**3,bank:'B'},{part:'model',capacity:32*1024**3,bank:'A'}]},
-    temperatures:{ram:{sensors:[{hardware_id:'/memory/dimm/1',name:'model · DIMM #1',temp_c:37},{hardware_id:'/memory/dimm/3',name:'model · DIMM #3',temp_c:36}]}}});
-  assert.deepEqual(cards.map(c=>[c.id,c.value,c.unit,c.temp]),[['/memory/dimm/1',32,'GB',37],['/memory/dimm/3',32,'GB',36]]);
-  assert.ok(cards.every(c=>c.capacityOnly&&!c.label.includes(' · A')));
-});
-
-test('ambiguous unequal DIMMs do not borrow temperature by array order',()=>{
-  const cards=deviceModels({hardware:{memory:[{part:'same',capacity:16},{part:'same',capacity:32}]},temperatures:{ram:{sensors:[{name:'same · DIMM #1',temp_c:37},{name:'same · DIMM #3',temp_c:36}]}}});
-  assert.ok(cards.every(c=>c.temp===undefined));
+  assert.deepEqual(cards.map(c=>[c.id,c.value,c.temp,c.volumes[0].free]),[['disk-0',5,25,300],['disk-1',30,40,100]]);
 });
 
 test('missing disk telemetry remains missing and all mapped volumes stay separate',()=>{

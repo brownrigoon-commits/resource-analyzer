@@ -24,23 +24,10 @@ export function deviceModels(system={}, stale=false) {
       source:gpu.source||'장치 사용률'});
   }
 
-  const modules=rows(system.hardware?.memory), sensors=rows(system.temperatures?.ram?.sensors);
-  const sameSpec=modules.length>0&&modules.every(m=>m.part===modules[0].part&&m.capacity===modules[0].capacity);
-  const types={24:'DDR3',26:'DDR4',34:'DDR5',30:'LPDDR4',35:'LPDDR5'};
-  // Identical modules can share their capacity/specification, but their SMBIOS
-  // bank order does not establish a DIMM temperature sensor's slot identity.
-  const sensorModules=sameSpec&&sensors.length===modules.length&&sensors.every(s=>s.name?.includes(modules[0].part));
-  modules.forEach((module,index)=>{
-    const matches=sensors.filter(s=>module.part&&s.name?.includes(module.part));
-    const sensor=sensorModules?sensors[index]:modules.filter(m=>m.part===module.part).length===1&&matches.length===1?matches[0]:null;
-    const slot=sensor?.name?.match(/DIMM #[0-9]+/)?.[0]||[module.bank,module.slot].filter(Boolean).join(' · ')||`모듈 ${index+1}`;
-    cards.push({id:sensor?.hardware_id||`ram-${module.bank||''}-${module.slot||''}-${index}`,kind:'ram',label:`메모리 · ${slot}`,
-      name:[module.manufacturer,module.part].filter(Boolean).join(' · '),spec:[types[module.type],module.speed?`${module.speed} MT/s`:null].filter(Boolean).join(' · '),
-      value:module.capacity/1024**3,unit:'GB',temp:stale?null:sensor?.temp_c,
-      detail:'개별 사용률은 Windows에서 제공하지 않습니다',extra:'사용량은 전체 메모리 카드에서 확인',capacityOnly:true});
-  });
-
-  for(const disk of rows(system.hardware?.storage)) {
+  const systemDrive=driveKey(system.hardware?.system_disk?.drive||'C:');
+  const diskRank=disk=>rows(disk.drives).some(drive=>driveKey(drive)===systemDrive)?0:disk.bus==='USB'?2:1;
+  const storage=[...rows(system.hardware?.storage)].sort((a,b)=>diskRank(a)-diskRank(b)||a.number-b.number);
+  for(const disk of storage) {
     if(!Number.isInteger(disk.number))continue;
     const id=String(disk.number), io=system.physical_disk_io?.[id];
     const volumes=rows(disk.drives).map(drive=>rows(system.disks).find(d=>driveKey(d.drive)===driveKey(drive))).filter(Boolean);
