@@ -34,8 +34,9 @@ $network=$null
 if($null -ne $adapter){$network=@{name=$adapter.Name;medium=[string]$adapter.PhysicalMediaType;virtual=[bool]$adapter.Virtual;link_mbps=[double]$adapter.ReceiveLinkSpeed/1000000}}
 $result=@{network=$network}
 if(INCLUDE_HARDWARE){try{
-  $memory=@(Get-CimInstance Win32_PhysicalMemory | ForEach-Object { @{capacity=[double]$_.Capacity;type=[int]$_.SMBIOSMemoryType;part=([string]$_.PartNumber).Trim()} })
-  $storage=@(Get-PhysicalDisk | ForEach-Object { @{name=$_.FriendlyName;size=[double]$_.Size;media=[string]$_.MediaType;bus=[string]$_.BusType} })
+  $memory=@(Get-CimInstance Win32_PhysicalMemory | ForEach-Object { @{capacity=[double]$_.Capacity;type=[int]$_.SMBIOSMemoryType;part=([string]$_.PartNumber).Trim();manufacturer=([string]$_.Manufacturer).Trim();bank=[string]$_.BankLabel;slot=[string]$_.DeviceLocator;speed=[int]$_.ConfiguredClockSpeed} })
+  $partitions=@(Get-Partition -ErrorAction SilentlyContinue)
+  $storage=@(Get-Disk | ForEach-Object { $disk=$_; @{number=[int]$disk.Number;name=$disk.FriendlyName;size=[double]$disk.Size;bus=[string]$disk.BusType;drives=@($partitions | Where-Object { $_.DiskNumber -eq $disk.Number -and $_.DriveLetter } | ForEach-Object { [string]$_.DriveLetter+':' })} })
   $systemDisk=Get-Partition -DriveLetter $env:SystemDrive.TrimEnd(':') -ErrorAction SilentlyContinue | Get-Disk -ErrorAction SilentlyContinue | Select-Object -First 1
   $result.hardware=@{memory=$memory;storage=$storage;system_disk=if($systemDisk){@{name=$systemDisk.FriendlyName;size=[double]$systemDisk.Size;bus=[string]$systemDisk.BusType;drive=$env:SystemDrive}}else{$null}}
 }catch{}}
@@ -82,7 +83,7 @@ class SystemInfoSampler:
         shell = Path(os.environ.get('SystemRoot', r'C:\Windows')) / 'System32/WindowsPowerShell/v1.0/powershell.exe'
         last_hardware = 0
         while not self._stop.is_set():
-            include_hardware = last_hardware == 0 or time.monotonic() - last_hardware > 300
+            include_hardware = last_hardware == 0 or time.monotonic() - last_hardware > 60
             script = _INVENTORY.replace('INCLUDE_HARDWARE', '$true' if include_hardware else '$false')
             encoded = base64.b64encode(script.encode('utf-16-le')).decode('ascii')
             try:
@@ -142,6 +143,7 @@ class SystemInfoSampler:
 class DiskActivitySampler:
     """Busiest physical drive: 100 - % Idle Time, never inferred from MiB/s."""
     def __init__(self):
+        self.by_disk = {}
         self._pdh = None
         self._query, self._counter = ct.c_void_p(), ct.c_void_p()
         try:
@@ -165,6 +167,7 @@ class DiskActivitySampler:
             self.close()
 
     def sample(self):
+        self.by_disk = {}
         if not self._pdh or not self._query:
             return None
         if self._pdh.PdhCollectQueryData(self._query):
@@ -182,9 +185,12 @@ class DiskActivitySampler:
             if rc or count.value * ct.sizeof(_PdhItem) > allocated:
                 return None
             items = ct.cast(buffer, ct.POINTER(_PdhItem))
-            values = [100 - items[i].FmtValue.doubleValue for i in range(count.value)
-                      if items[i].szName != '_Total' and items[i].FmtValue.CStatus in (0, 1)
-                      and math.isfinite(items[i].FmtValue.doubleValue)]
+            for i in range(count.value):
+                item = items[i]
+                identity = str(item.szName).split(' ', 1)[0]
+                if identity.isdecimal() and item.FmtValue.CStatus in (0, 1) and math.isfinite(item.FmtValue.doubleValue):
+                    self.by_disk[identity] = round(max(0, min(100, 100 - item.FmtValue.doubleValue)), 1)
+            values = list(self.by_disk.values())
             return round(max(0, min(100, max(values))), 1) if values else None
         return None
 
@@ -193,3 +199,28 @@ class DiskActivitySampler:
             self._pdh.PdhCloseQuery(self._query)
         self._query = ct.c_void_p()
         self._pdh = None
+
+
+class DiskTransferSampler:
+    """Per-physical-drive transfer rates; warmup/reset is missing, never zero."""
+    def __init__(self):
+        self.previous = {}
+        self.updated = time.monotonic()
+
+    def sample(self):
+        now = time.monotonic()
+        elapsed = now - self.updated
+        current = psutil.disk_io_counters(perdisk=True, nowrap=False) or {}
+        result = {}
+        for name, counter in current.items():
+            if not name.startswith('PhysicalDrive') or not name[13:].isdecimal():
+                continue
+            previous = self.previous.get(name)
+            read = write = None
+            if previous and elapsed > 0:
+                dr, dw = counter.read_bytes - previous.read_bytes, counter.write_bytes - previous.write_bytes
+                if dr >= 0 and dw >= 0:
+                    read, write = round(dr / elapsed / 1024**2, 3), round(dw / elapsed / 1024**2, 3)
+            result[name[13:]] = {'read_mbps': read, 'write_mbps': write}
+        self.previous, self.updated = current, now
+        return result

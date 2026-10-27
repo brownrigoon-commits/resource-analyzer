@@ -230,3 +230,9 @@ Actions 산출물은 30일 보관되므로 영구 보관은 버전별 E 백업�
 ## 라이선스
 
 [MIT License](LICENSE). 오류 제보와 개선 제안은 [GitHub Issues](https://github.com/brownrigoon-commits/resource-analyzer/issues)를 이용해 주세요. 제보에 측정 기록이나 화면을 첨부할 때에는 개인 정보가 없는지 확인해 주세요.
+
+### 장치별 카드 (0.7.0)
+
+GPU와 내장·외장 디스크를 각각의 카드로 표시합니다. 디스크는 물리 번호로 사용률·전송량·온도·드라이브별 용량을 연결합니다. RAM은 전체 사용률과 모듈별 규격·용량·지원되는 온도를 함께 보여줍니다. 모듈별 사용률은 제공하지 않습니다. 장치 정보는 약 60초마다 갱신하고, 장치별 작은 그래프는 현재 브라우저의 최근 60초 값입니다.
+
+장치 카드 검사: `node --test test_device_cards.mjs`. 디스크 카운터 검사: `python -m unittest test_system_metrics`.

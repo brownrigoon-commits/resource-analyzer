@@ -1,3 +1,12 @@
+## 장치별 카드 — 2026-10-28 (0.7.0)
+
+- CPU 1개는 유지하고 GPU는 각 API 장치 ID별로 나누었다. GPU 코어 온도와 보조 센서 최고 온도를 구분한다. 대표 GPU의 값이 다른 장치 카드에 복사되지 않는다.
+- 메모리 전체 사용량 카드와 모듈별 규격·설치 용량·온도 카드를 함께 표시한다. Windows는 모듈별 사용률을 제공하지 않으므로 나누어 추정하지 않는다. 동일한 규격의 모듈은 센서 DIMM 번호를 이름으로 사용하며 SMBIOS 채널 순서로 센서 위치를 추측하지 않는다. 모호한 연결은 온도 미측정으로 남긴다.
+- Get-Disk의 물리 디스크 번호와 Get-Partition 드라이브 문자를 연결한다. PDH 활동률, psutil PhysicalDrive 전송량, LibreHardwareMonitor /hdd|ssd|nvme/<DriveNumber> 온도를 물리 번호로 연결한다. 동일 모델 두 개, USB 외장 디스크, 여러 드라이브 문자를 지원한다.
+- 장치 인벤토리는 기존 제한 시간 10초의 백그라운드 쿼리에서 60초마다 갱신한다. per-disk I/O는 워밍업·카운터 초기화·분리 후 재연결 때 0 대신 미측정이다. 장치별 실시간 그래프는 브라우저 내 최근 60초이며 기존 저장 기록은 집계 방식 그대로다.
+- 공식 센서 번호 근거: https://github.com/LibreHardwareMonitor/LibreHardwareMonitor/blob/v0.9.6/LibreHardwareMonitorLib/Hardware/Storage/StorageDevice.cs (DriveNumber로 Identifier 생성).
+- 검증 중: 장치 카드 JavaScript 검사 5개 및 기존 JS 19개 통과. 전체 Python 검사에서 변경 전 HEAD에도 재현되는 test_resource_ipc 동시 파일 요청 40개 시험의 응답 제한 시간 오류 1개가 있다. 기능 수정 범위 밖의 기존 시험 실패를 숨기지 않고 별도 기록한다. 최종 배포 검증은 아래 후속 기록에 추가한다.
+
 # 다른 PC·채팅에서 이어서 작업하기
 
 ## 장시간 수집 복구 — 2026-10-24 (0.6.6)

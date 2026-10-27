@@ -418,6 +418,7 @@ def make_handler(monitor, port):
                         '/governor.js': 'governor.js',
                         '/speedtest.mjs': 'speedtest.mjs',
                         '/resource-report.mjs': 'resource-report.mjs',
+                        '/device-cards.mjs': 'device-cards.mjs',
                         '/resource-rules.mjs': 'resource-rules.mjs',
                         '/warning-history.mjs': 'warning-history.mjs',
                         '/task-labels.mjs': 'task-labels.mjs',

@@ -65,7 +65,7 @@ class OnboardingTests(unittest.TestCase):
         self.assertFalse(self.monitor.collecting)
 
     def test_speedtest_assets_are_local_and_connections_are_endpoint_scoped(self):
-        for path in ('/speedtest.mjs', '/resource-report.mjs', '/resource-rules.mjs', '/warning-history.mjs', '/vendor/cloudflare-speedtest-1.14.2.mjs'):
+        for path in ('/device-cards.mjs', '/speedtest.mjs', '/resource-report.mjs', '/resource-rules.mjs', '/warning-history.mjs', '/vendor/cloudflare-speedtest-1.14.2.mjs'):
             with self.request(path) as response:
                 self.assertIn('javascript', response.headers['Content-Type'])
                 self.assertGreater(len(response.read()), 100)

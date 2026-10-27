@@ -4,10 +4,26 @@ import time
 import unittest
 from unittest.mock import patch
 
-from system_metrics import SystemInfoSampler, connection_kind, traffic_delta
+from system_metrics import SystemInfoSampler, DiskTransferSampler, connection_kind, traffic_delta
 
 
 class SystemMetricsTests(unittest.TestCase):
+    @patch('system_metrics.time.monotonic', side_effect=[0, 1, 3, 4, 5, 6])
+    @patch('system_metrics.psutil.disk_io_counters')
+    def test_physical_disk_io_warmup_reset_disconnect_and_reconnect(self, counters, clock):
+        counters.side_effect = [
+            {'PhysicalDrive2': NS(read_bytes=100, write_bytes=200)},
+            {'PhysicalDrive2': NS(read_bytes=100+2*1024**2, write_bytes=200+4*1024**2)},
+            {'PhysicalDrive2': NS(read_bytes=0, write_bytes=0)}, {},
+            {'PhysicalDrive2': NS(read_bytes=500, write_bytes=500)},
+        ]
+        reader = DiskTransferSampler()
+        self.assertIsNone(reader.sample()['2']['read_mbps'])
+        self.assertEqual(reader.sample()['2'], {'read_mbps': 1, 'write_mbps': 2})
+        self.assertIsNone(reader.sample()['2']['write_mbps'])
+        self.assertEqual(reader.sample(), {})
+        self.assertIsNone(reader.sample()['2']['read_mbps'])
+
     def test_traffic_converts_bytes_per_second_to_decimal_megabits(self):
         self.assertEqual(traffic_delta(NS(bytes_recv=100, bytes_sent=200),
             NS(bytes_recv=2_000_100, bytes_sent=1_000_200), 2), (8, 4))

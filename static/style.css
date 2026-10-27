@@ -139,3 +139,9 @@
 .governor-error{margin:0;padding:12px 22px;background:#342b20;border-top:1px solid #655036;color:var(--warn);font-size:11px;overflow-wrap:anywhere}
 @media(max-width:850px){.governor-thresholds{grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}.governor-activity{grid-template-columns:minmax(190px,.8fr) minmax(0,1.7fr);gap:16px}.governor-current{padding-left:16px}}
 @media(max-width:560px){.governor-heading{flex-wrap:wrap;gap:14px}.governor-toggle{min-height:44px;min-width:142px}.governor-status-line{margin:14px 15px 0;gap:8px}.governor-status-line p{min-width:130px}.governor-status-line>.muted{width:100%;font-size:9px}.governor-thresholds{grid-template-columns:repeat(2,minmax(0,1fr));margin:14px 15px 0;gap:14px 10px}.governor-thresholds dd{font-size:11px}.governor-activity{grid-template-columns:1fr;margin:16px 15px;gap:16px}.governor-counters{max-width:310px}.governor-current{padding:15px 0 0;border-left:0;border-top:1px solid var(--border)}.governor-adapters{padding:0 15px 16px}.governor-adapters ul{display:grid;grid-template-columns:1fr}.governor-adapters li{justify-content:space-between;gap:12px}.governor-adapters li.subtle{justify-content:flex-start}.governor-notes{padding:12px 15px;font-size:9px}.governor-error{padding:12px 15px}}
+
+/* Device cards keep long model names, module notes and volume sizes readable. */
+.device-card .metric-model{display:block;min-height:35px;overflow:visible}
+.device-card .metric-spec,.device-card p{white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:anywhere}
+.device-card .metric-value strong{font-size:32px}
+.device-card .sparkline{opacity:.25;pointer-events:none}

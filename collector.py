@@ -11,7 +11,7 @@ import psutil
 from gpu_metrics import GpuSampler
 from process_metrics import ProcessSampler
 from temperature_metrics import TemperatureSampler
-from system_metrics import SystemInfoSampler, DiskActivitySampler
+from system_metrics import SystemInfoSampler, DiskActivitySampler, DiskTransferSampler
 from task_context import TaskContext, process_role
 
 SAMPLE_INTERVAL_S = 1.0
@@ -109,6 +109,7 @@ class Collector:
         self.temperatures = TemperatureSampler()
         self.system_info = SystemInfoSampler()
         self.disk_activity = DiskActivitySampler()
+        self.disk_transfer = DiskTransferSampler()
         self.previous = {}
         self.metadata = {}
         self.task_context = TaskContext()
@@ -226,6 +227,8 @@ class Collector:
             'disks': self.disks, 'gpus': gpu_data.get('gpus', []),
             'temperatures': self.temperatures.sample(),
             'disk_busy_pct': self.disk_activity.sample(),
+            'physical_disk_activity': dict(self.disk_activity.by_disk),
+            'physical_disk_io': self.disk_transfer.sample(),
             **self.system_info.sample(),
         }, 'groups': sorted(groups.values(), key=lambda g: (g['gpu_pct'] or 0, g['cpu_pct'], g['ram_gb']), reverse=True),
             'errors': (gpu_data.get('errors', []) + process_data.get('errors', []))[:4],

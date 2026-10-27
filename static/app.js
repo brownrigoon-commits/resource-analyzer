@@ -1,8 +1,10 @@
 "use strict";
 import {usageLimits, thermalLimits, levelFor, temperatureReadings, systemDiskCapacity} from './resource-report.mjs';
 import {mountWarningHistory} from './warning-history.mjs';
+import {mountDeviceCards} from './device-cards.mjs';
 (() => {
   const $ = (id) => document.getElementById(id);
+  const renderDeviceCards=mountDeviceCards(document);
   const state = {snapshot:null,history:null,minutes:60,chartMode:"live",livePoints:[],mode:"live",sort:{live:{key:"cpu_pct",dir:-1},history:{key:"cpu_avg",dir:-1}},search:"",series:new Set(["cpu_pct","gpu_pct","ram_pct"]),selectedGroup:null,historyRequest:0,chartPoints:[],lastSuccess:0};
   let snapshotDeadline=performance.now();
   const colors = {cpu_pct:"#82a8ff",gpu_pct:"#49dac3",ram_pct:"#bc9aff",vram_pct:"#edc783"};
@@ -102,7 +104,7 @@ import {mountWarningHistory} from './warning-history.mjs';
   function nextDeadlineAfter(deadline,now){const target=deadline+1000;return target>now?target:target+(Math.floor((now-target)/1000)+1)*1000;}
   async function pollSnapshot(){
     try{state.snapshot=await request("/api/snapshot");state.lastSuccess=Date.now();appendLiveSample(state.snapshot);renderSnapshot();}
-    catch(e){renderDiskCapacity({},true);if(state.snapshot){renderTemperatures({},null,true);renderUsage({},null,true);renderNetwork({},true);}$("live-status").className="live-status waiting";if(e.starting){$("live-status").innerHTML=e.collectorError?"<i></i>수집 확인 필요":"<i></i>첫 측정 준비 중";$("last-update").textContent=state.lastSuccess?`마지막 수신 ${time(state.lastSuccess/1000,true)}`:"장치 정보를 확인하고 있습니다";$("errors-banner").hidden=!e.collectorError&&!state.snapshot;$("errors-banner").textContent=e.collectorError?`첫 측정 준비 중 확인이 필요합니다: ${String(e.collectorError)}`:state.snapshot?"새 측정을 준비 중입니다. 표시된 수치는 이전에 받은 마지막 값입니다.":"";}else{$("live-status").innerHTML="<i></i>연결 확인 필요";$("last-update").textContent=state.lastSuccess?`마지막 수신 ${time(state.lastSuccess/1000,true)}`:"서버에 연결할 수 없습니다";$("errors-banner").hidden=false;$("errors-banner").textContent="실시간 수집 서버 응답이 없습니다. 표시된 수치는 마지막으로 받은 값이며 새 측정값이 아닙니다. 연결을 자동으로 다시 확인합니다.";}}
+    catch(e){renderDiskCapacity({},true);if(state.snapshot){renderDeviceCards(state.snapshot.system||{},true);renderTemperatures({},null,true);renderUsage({},null,true);renderNetwork({},true);}$("live-status").className="live-status waiting";if(e.starting){$("live-status").innerHTML=e.collectorError?"<i></i>수집 확인 필요":"<i></i>첫 측정 준비 중";$("last-update").textContent=state.lastSuccess?`마지막 수신 ${time(state.lastSuccess/1000,true)}`:"장치 정보를 확인하고 있습니다";$("errors-banner").hidden=!e.collectorError&&!state.snapshot;$("errors-banner").textContent=e.collectorError?`첫 측정 준비 중 확인이 필요합니다: ${String(e.collectorError)}`:state.snapshot?"새 측정을 준비 중입니다. 표시된 수치는 이전에 받은 마지막 값입니다.":"";}else{$("live-status").innerHTML="<i></i>연결 확인 필요";$("last-update").textContent=state.lastSuccess?`마지막 수신 ${time(state.lastSuccess/1000,true)}`:"서버에 연결할 수 없습니다";$("errors-banner").hidden=false;$("errors-banner").textContent="실시간 수집 서버 응답이 없습니다. 표시된 수치는 마지막으로 받은 값이며 새 측정값이 아닙니다. 연결을 자동으로 다시 확인합니다.";}}
     finally{const now=performance.now();snapshotDeadline=nextDeadlineAfter(snapshotDeadline,now);window.setTimeout(pollSnapshot,Math.max(0,snapshotDeadline-now));}
   }
   async function pollHistory(){await loadHistory();window.setTimeout(pollHistory,30000);}
@@ -119,7 +121,7 @@ import {mountWarningHistory} from './warning-history.mjs';
     $("ram-value").textContent=number(sys.ram_pct);$("ram-detail").textContent=`${number(sys.ram_used_gb)} / ${number(sys.ram_total_gb)} GiB · 여유 ${number(sys.ram_available_gb)} GiB`;
     $("disk-value").textContent=number(sum(sys.disk_read_mbps,sys.disk_write_mbps),1);$("disk-detail").textContent=`활동 ${percent(sys.disk_busy_pct)} · 읽기 ${number(sys.disk_read_mbps,1)} · 쓰기 ${number(sys.disk_write_mbps,1)} MiB/s`;$("disk-detail").title=$("disk-detail").textContent;
     renderTemperatures(sys,gpu,s.stale===true);
-    renderUsage(sys,gpu,s.stale===true);renderHardware(sys,gpu);renderNetwork(sys.network,s.stale===true);renderDiskCapacity(sys,s.stale===true);
+    renderDeviceCards(sys,s.stale===true,s.ts);renderUsage(sys,gpu,s.stale===true);renderHardware(sys,gpu);renderNetwork(sys.network,s.stale===true);renderDiskCapacity(sys,s.stale===true);
     renderInsights();renderDevices();renderVoice();renderRecording();renderTable();renderChart();
     if(state.selectedGroup)renderDialog();
     const errors=rows(s.errors).slice();if(s.stale)errors.unshift("새 측정값이 지연되어 마지막 수신값을 표시하고 있습니다");$("errors-banner").hidden=!errors.length;
