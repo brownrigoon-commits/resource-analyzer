@@ -6,6 +6,7 @@ from unittest.mock import Mock, patch
 
 from runtime_state import read_intent
 from server import Monitor, history_frame, make_handler
+from sampling_worker import WorkerCleanupPending
 
 
 def frame():
@@ -88,6 +89,55 @@ class CollectionRecoveryTests(unittest.TestCase):
             self.assertTrue(all(len(call.args[0]) <= 60 for call in record.call_args_list))
             self.assertIn('storage offline', self.monitor.storage_error)
             self.assertTrue(worker.closed)
+
+    def test_delayed_exit_retries_cleanup_before_creating_replacement(self):
+        failing, healthy = Collector(), Collector()
+        failing.sample = Mock(side_effect=TimeoutError('driver stalled'))
+        attempts = []
+        def close():
+            attempts.append(1)
+            if len(attempts) < 3:
+                raise WorkerCleanupPending(failing)
+            failing.closed = True
+        failing.close = close
+        def create(**kwargs):
+            if not attempts:
+                return failing
+            self.assertTrue(failing.closed, 'No overlapping native samplers')
+            return healthy
+        with patch('server.Collector', side_effect=create) as factory:
+            self.monitor.start()
+            self.wait(lambda: self.monitor.latest is not None, timeout=12)
+            self.assertEqual(factory.call_count, 2)
+            self.assertEqual(len(attempts), 3)
+            self.assertTrue(self.monitor.collecting)
+            self.assertIsNone(self.monitor.error)
+            self.assertIsNone(self.monitor.retiring_collector)
+            self.monitor.pause()
+
+    def test_initialization_cleanup_pending_keeps_the_owned_sampler(self):
+        pending, healthy = Collector(), Collector()
+        with patch('server.Collector', side_effect=[WorkerCleanupPending(pending), healthy]) as factory:
+            self.monitor.start()
+            self.wait(lambda: self.monitor.latest is not None)
+            self.assertTrue(pending.closed)
+            self.assertEqual(factory.call_count, 2)
+            self.assertTrue(self.monitor.collecting)
+            self.monitor.pause()
+
+    def test_pending_cleanup_is_retained_across_explicit_pause_and_start(self):
+        pending, healthy = Collector(), Collector()
+        pending.callback = lambda: self.monitor.recording_stop.set()
+        pending.close = Mock(side_effect=[WorkerCleanupPending(pending), None])
+        with patch('server.Collector', side_effect=[pending, healthy]) as factory:
+            self.monitor.start()
+            self.wait(lambda: not self.monitor.collecting)
+            self.assertIs(self.monitor.retiring_collector, pending)
+            self.monitor.start()
+            self.wait(lambda: factory.call_count == 2 and self.monitor.error is None)
+            self.assertEqual(pending.close.call_count, 2)
+            self.assertIsNone(self.monitor.retiring_collector)
+            self.monitor.pause()
 
     def test_explicit_pause_is_persisted_but_internal_close_preserves_intent(self):
         with patch('server.Collector', return_value=Collector()):

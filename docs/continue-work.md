@@ -1,3 +1,10 @@
+## 측정 프로세스 정리 재시도 — 2026-10-28 (0.7.3)
+
+- 운영 0.7.2는 12:35:52 process-counters 단계 응답 제한 시간을 넘겼다. 이어 `Telemetry worker shutdown is still pending`이 복구 예외 처리 안의 close()에서 다시 발생해 12:36:26 수집 스레드가 종료됐다. HTTP 서버는 살아 있어 새로고침으로 복구되지 않았다. health의 collecting=false, collection_requested=true, recovery_attempts=15와 runtime 로그를 대조했다. 최초 Windows 프로세스 카운터 호출 정체의 OS/드라이버 원인은 확정하지 않았다.
+- 정상 monitor/start API로 기존 수집을 재시작해 새 표본이 갱신됨을 확인했다. 개인 DB와 누적 경고를 삭제하거나 다른 앱을 종료하지 않았다.
+- 정리를 guarded retry loop 안으로 옮겼다. WorkerCleanupPending은 초기화 중 정리 지연을 포함해 소유한 collector를 전달한다. 종료 확인 전 새 worker를 만들지 않으며, pause/start 사이에도 정리 대기 객체를 보존한다.
+- 관련 Python 52개 통과: 실제 spawn의 측정 정지·종료·초기화 오류, 지연 종료 재시도, 초기화 정리 지연, 중지 후 재시작 소유권 보존, supervisor/monitor/onboarding/updater. 밤샘 무중단 검증은 수행하지 않았다. 실행 파일 적용 검증은 후속 기록을 확인한다.
+
 ## 카드 정리 — 2026-10-28 (0.7.2)
 
 - 사용자 확인 후 개별 RAM 모듈 카드를 제거했다. 전체 메모리 사용량·온도 카드는 유지하며 센서 수집과 이전 기록은 삭제하지 않는다.

@@ -14,6 +14,13 @@ PHASES = ('starting', 'initializing', 'system', 'gpu', 'process-counters', 'proc
           'task-context', 'disk-capacity', 'inventory', 'publishing', 'waiting')
 
 
+class WorkerCleanupPending(RuntimeError):
+    """Retain ownership when Windows has not finished terminating a sampler."""
+    def __init__(self, collector):
+        self.collector = collector
+        super().__init__('Telemetry worker shutdown is still pending')
+
+
 def run_worker(buffer, requested, ready, stopping, phase, factory=None):
     # The parent retains its sensor connection; restarting this process must not
     # repeatedly request administrator approval for the temperature helper.
@@ -143,8 +150,12 @@ class IsolatedCollector:
                     self.process.terminate()
                     self.process.join(timeout=3)
                 if self.process.is_alive():
-                    raise RuntimeError('Telemetry worker shutdown is still pending')
+                    raise WorkerCleanupPending(self)
             self.closed = True
+        except OSError as error:
+            # Keep the owned process handle available to the parent's retry
+            # loop, including when cleanup fails during initialization.
+            raise WorkerCleanupPending(self) from error
         finally:
             if self.owns_temperatures:
                 self.temperatures.close()

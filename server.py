@@ -17,7 +17,7 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 from collector import SAMPLE_INTERVAL_S
-from sampling_worker import IsolatedCollector as Collector
+from sampling_worker import IsolatedCollector as Collector, WorkerCleanupPending
 from history import History, mean, gpu_value
 from app_paths import APP_ID, VERSION, bundle_dir, state_dir
 from governor import Governor
@@ -136,6 +136,7 @@ class Monitor:
         self.storage_error = None
         self.recovery_attempts = 0
         self.sampling_worker_pid = None
+        self.retiring_collector = None
         self.dropped_history_samples = 0
         self.intent_session = supervision_session or secrets.token_hex(16)
         self.intent_path = data / 'collection-intent.json'
@@ -209,7 +210,10 @@ class Monitor:
         return result
 
     def run(self):
-        collector = None
+        # A pause/start must not lose ownership of a child whose Windows exit
+        # acknowledgement is delayed. Never create a replacement alongside it.
+        collector = self.retiring_collector
+        retiring = collector is not None
         temperatures = None
         pending = collections.deque(maxlen=60)
         recent = collections.deque(maxlen=900)
@@ -229,6 +233,12 @@ class Monitor:
                     break
                 begin = time.monotonic()
                 try:
+                    if retiring:
+                        collector.close()
+                        collector = None
+                        self.retiring_collector = None
+                        self.sampling_worker_pid = None
+                        retiring = False
                     if collector is None:
                         collector = Collector(cancel_event=self.recording_stop, temperature_sampler=temperatures)
                         self.sampling_worker_pid = collector.pid
@@ -290,10 +300,13 @@ class Monitor:
                         self.error = '측정 엔진 자동 복구 중: ' + type(error).__name__ + ': ' + str(error)[:160]
                         self.recovery_attempts += 1
                     LOG.warning('Telemetry failure; restarting only the sampler', exc_info=True)
-                    if collector is not None:
-                        collector.close()
-                        collector = None
-                    self.sampling_worker_pid = None
+                    # Cleanup can itself fail or remain pending. Retry it inside
+                    # the guarded loop instead of letting it end collection.
+                    if isinstance(error, WorkerCleanupPending):
+                        collector = error.collector
+                    retiring = collector is not None
+                    self.retiring_collector = collector
+                    self.sampling_worker_pid = collector.pid if collector is not None else None
                     failures += 1
                     if self.recording_stop.wait(min(30, 2 ** min(failures - 1, 5))):
                         break
@@ -313,7 +326,13 @@ class Monitor:
                     except Exception:
                         LOG.warning('Could not flush remaining summaries', exc_info=True)
                 if collector:
-                    collector.close()
+                    try:
+                        collector.close()
+                        self.retiring_collector = None
+                    except Exception as error:
+                        self.retiring_collector = collector
+                        self.error = '측정 프로세스 종료 재시도 대기: ' + str(error)[:160]
+                        LOG.warning('Sampler cleanup remains pending; ownership retained', exc_info=True)
             finally:
                 if temperatures is not None:
                     temperatures.close()

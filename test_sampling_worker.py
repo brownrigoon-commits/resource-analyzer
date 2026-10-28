@@ -3,8 +3,9 @@ import threading
 import time
 import unittest
 from unittest.mock import Mock
+from types import SimpleNamespace
 
-from sampling_worker import IsolatedCollector
+from sampling_worker import IsolatedCollector, WorkerCleanupPending
 
 
 class FakeCollector:
@@ -35,6 +36,21 @@ class FailingInitialization(FakeCollector):
 
 
 class SamplingWorkerTests(unittest.TestCase):
+    def test_delayed_windows_exit_retains_owner_and_can_be_retried(self):
+        collector = IsolatedCollector.__new__(IsolatedCollector)
+        collector.closed = False
+        collector.stopping = SimpleNamespace(value=0)
+        collector.owns_temperatures = False
+        collector.process = Mock(pid=42)
+        collector.process.is_alive.side_effect = [True, True, False, False]
+        with self.assertRaises(WorkerCleanupPending) as caught:
+            collector.close()
+        self.assertIs(caught.exception.collector, collector)
+        self.assertFalse(collector.closed)
+        collector.close()
+        self.assertTrue(collector.closed)
+        collector.process.terminate.assert_called_once()
+
     def collector(self, factory, **options):
         collector = IsolatedCollector(factory=factory, startup_timeout=10, sensors=False, **options)
         self.addCleanup(collector.close)
