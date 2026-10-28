@@ -5,6 +5,11 @@
 - 정리를 guarded retry loop 안으로 옮겼다. WorkerCleanupPending은 초기화 중 정리 지연을 포함해 소유한 collector를 전달한다. 종료 확인 전 새 worker를 만들지 않으며, pause/start 사이에도 정리 대기 객체를 보존한다.
 - 관련 Python 52개 통과: 실제 spawn의 측정 정지·종료·초기화 오류, 지연 종료 재시도, 초기화 정리 지연, 중지 후 재시작 소유권 보존, supervisor/monitor/onboarding/updater. 밤샘 무중단 검증은 수행하지 않았다. 실행 파일 적용 검증은 후속 기록을 확인한다.
 
+- 배포 검증: 깨끗한 소스 `25f4f02cd5b3c686a87f4c4befd7729b38c5a57a`에서 표준 build.ps1 완료. 0.7.3 실행 파일 SHA-256 `09d7439aebe338a0cd7e2ced422f48726b4632061aa5bb13559b3c68f16a5380`. 별도 포트 17443·개인 DB와 분리한 local/recovery-v073-isolated에서 이 실행 파일이 소유한 측정 자식을 종료시켰고, 이전 PID 종료·새 PID 생성·recovery_attempts=1·새 표본 0.14초·수집/저장 오류 없음을 확인했다. 시험 서비스는 정상 종료했다. 종료 지연 자체는 Windows 동작을 모의한 회귀 검사로 검증했다.
+- 운영 적용 대기: 자동 승인 검토가 `ResourceAnalyzer.exe --apply-update --autostart --no-browser` 실행을 정책으로 차단했다. 세부 이유는 제공되지 않았다. 0.7.3을 운영에 적용했다고 보고하지 않는다. 현재 기본 포트는 수집을 재개한 0.7.2이며 Chrome에서 실제 숫자·업데이트 시간이 진행됨을 확인했다. CPU/RAM/디스크 온도는 관리자 승인이 취소되어 미측정이며 두 GPU의 직접 읽은 온도만 표시된다.
+- 사용자 실행 파일: outputs/ResourceAnalyzer-v0.7.3/Update-ResourceAnalyzer.cmd, 바탕화면 `자원 분석기 0.7.3 적용.lnk`. 바탕화면 일반 `자원 분석기.exe`도 0.7.3으로 복사하고 크기/SHA-256 대조했다. 일반 실행은 이미 떠 있는 구버전을 갱신하지 않으므로 반드시 적용 바로가기를 실행해야 한다. 다음 차례에는 기본 포트의 실제 버전·표본·기록 보존·온도 승인을 확인한다.
+- 적용 전 E 체크포인트 `PC_INSTALL_BACKUPS/resource-analyzer/2026-10-28_13-31-48_91707e`: 실행 패키지·공식 센서 의존 파일·소스 bundle 등 67파일·33,673,664바이트 SHA-256 검증 완료. 최종 문서 체크포인트는 같은 프로젝트 LATEST.txt를 확인한다.
+
 ## 카드 정리 — 2026-10-28 (0.7.2)
 
 - 사용자 확인 후 개별 RAM 모듈 카드를 제거했다. 전체 메모리 사용량·온도 카드는 유지하며 센서 수집과 이전 기록은 삭제하지 않는다.
