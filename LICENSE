@@ -1,21 +1,126 @@
-MIT License
+독점 라이선스 — AI 이용 금지 (v1.0, 2026-11-13)
+PROPRIETARY LICENSE — NO AI USE (v1.0)
 
-Copyright (c) 2026 brownrigoon-commits
+Copyright (c) 2026 RIGOON STUDIO(리군 스튜디오). All rights reserved.
+저작권자: RIGOON STUDIO(리군 스튜디오) · 모든 권리 보유
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+실행 허락: GitHub Releases에 올린 공식 실행 파일은 누구나 자기 컴퓨터에 설치해 고치지 않은 그대로 실행할 수 있습니다. 그 밖의 이용(소스 코드의 복제·수정·재배포, AI 학습·복제 등)은 이 문서를 따릅니다. 제3자 구성요소의 라이선스는 third_party/ 폴더에 있습니다.
+Permission to run: anyone may install and run the official, unmodified release binaries published on GitHub Releases on their own computers. Everything else (copying, modifying or redistributing the source code, any AI use) is governed by this document. Third-party component licenses are in the third_party/ folder.
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+────────────────────────────────────────────────────────────
+[한국어]
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+제1조 (권리 보유)
+이 저장소와 그 배포물(웹사이트·앱·빌드 결과물 포함)에 담긴 RIGOON STUDIO의
+소스 코드, 화면·UI 디자인, 문서, 문구, 이미지, 데이터, 설정과 그 구조·순서·구성
+(이하 "저작물")은 대한민국 저작권법과 국제 조약으로 보호됩니다. 이 문서는 어떠한
+이용 허락도 주지 않습니다. 저장소를 볼 수 있다는 사실은 이용 허락이 아닙니다.
+
+제2조 (일반 금지)
+사전 서면 허락 없이 저작물의 전부 또는 일부를 복제·배포·전송·전시·수정·번역하거나,
+2차적저작물을 작성하거나, 상업적·비상업적으로 이용하는 것을 금지합니다.
+
+제3조 (AI 이용 금지)
+사전 서면 허락 없이 다음 행위를 금지합니다. 사람이 직접 하든, 인공지능(AI) 시스템,
+머신러닝 모델, 대규모 언어 모델(LLM), 코딩 에이전트, 크롤러·스크레이퍼 같은 자동화
+수단을 쓰든 같습니다.
+  1. 저작물을 AI 모델의 학습·사전학습·미세조정·강화학습·평가·벤치마크 데이터로
+     쓰는 행위
+  2. 저작물을 데이터셋·말뭉치·임베딩·벡터 데이터베이스·검색 증강 생성(RAG) 색인에
+     넣는 행위
+  3. AI로 저작물의 코드·화면·기능·작동 흐름을 분석(역설계, REA 분석 포함)하여
+     복제·재구성·모방·재구현·번역·변환하는 행위
+  4. 저작물을 프롬프트나 참고 자료로 넣어 실질적으로 비슷한 코드·디자인·제품을
+     만들어 내는 행위
+  5. 크롤링·스크레이핑·텍스트·데이터 마이닝(TDM)으로 저작물을 수집하는 행위
+
+제4조 (텍스트·데이터 마이닝 권리 유보)
+저작권자는 EU 디지털 단일시장 저작권 지침(Directive (EU) 2019/790) 제4조 제3항과,
+이와 같은 유보를 인정하는 모든 법령에 따라 저작물에 대한 텍스트·데이터 마이닝
+권리를 명시적으로 유보합니다. 이 유보는 이 문서와 README 첫머리에 사람과 기계가
+모두 읽을 수 있는 문장으로 표시합니다.
+
+제5조 (GitHub 이용약관과의 관계)
+저장소가 GitHub에 공개된 경우에도 GitHub 이용약관이 정한 범위(GitHub 안에서 보기와
+포크) 밖의 이용은 허락하지 않습니다. 포크는 그 밖의 어떤 권리도 주지 않습니다.
+
+제6조 (제3자 구성요소)
+저장소에 포함된 제3자의 오픈소스와 자료는 각 원 라이선스와 권리자의 권리를 따릅니다.
+이 문서는 저작권자가 권리를 가진 부분에만 적용됩니다.
+
+제7조 (허락받은 작업)
+이 문서는 저작권자와 저작권자가 허락한 작업자가 이 저장소를 개발·유지보수하는 것을
+제한하지 않습니다.
+
+제8조 (위반 시 조치)
+이 문서를 위반한 이용은 저작권 침해입니다. 저작권자는 대한민국 저작권법 등 관련
+법령에 따라 침해 정지 청구, 손해배상 청구, 형사 고소를 포함한 민·형사상 법적 조치를
+취합니다.
+
+제9조 (허락 문의)
+이용 허락은 저작권자의 서면 허락으로만 받을 수 있습니다.
+문의: https://github.com/brownrigoon-commits
+
+────────────────────────────────────────────────────────────
+[English]
+
+1. Reservation of rights.
+   The source code, screen and UI designs, documentation, text, images, data and
+   configuration of RIGOON STUDIO in this repository and in anything built or
+   deployed from it (websites, apps and build outputs), including their structure,
+   sequence and organization (the "Work"), are protected by the Copyright Act of the
+   Republic of Korea and international treaties. This document grants no license of
+   any kind. Being able to view this repository is not permission to use it.
+
+2. General restrictions.
+   Without prior written permission, you may not copy, distribute, transmit,
+   display, modify, translate, create derivative works from, or make any commercial
+   or non-commercial use of the Work, in whole or in part.
+
+3. No AI use.
+   Without prior written permission, the following are prohibited, whether done by
+   a person or through an artificial intelligence system, machine-learning model,
+   large language model, coding agent, crawler, scraper or any other automated
+   means:
+   (a) using the Work to train, pre-train, fine-tune, align, evaluate or benchmark
+       any AI model;
+   (b) adding the Work to any dataset, corpus, embedding store, vector database or
+       retrieval-augmented generation (RAG) index;
+   (c) using AI to analyze the Work's code, screens, features or flows (including
+       reverse engineering and "REA" analysis) in order to copy, reconstruct,
+       imitate, re-implement, translate or convert it;
+   (d) supplying the Work as a prompt or reference to generate substantially
+       similar code, designs or products;
+   (e) collecting the Work by crawling, scraping, or text and data mining.
+
+4. Text and data mining reservation.
+   Pursuant to Article 4(3) of Directive (EU) 2019/790 and any other law that
+   recognizes such a reservation, the rights holder expressly reserves all text and
+   data mining rights in the Work. This reservation is stated in plain language,
+   readable by people and machines, in this document and at the top of the README.
+
+5. GitHub Terms of Service.
+   If this repository is public on GitHub, no use is permitted beyond what GitHub's
+   Terms of Service require (viewing and forking within GitHub). A fork grants no
+   other rights.
+
+6. Third-party components.
+   Third-party open-source code and materials included in this repository remain
+   under their own licenses and their owners' rights. This document applies only to
+   the portions in which the rights holder holds rights.
+
+7. Authorized work.
+   This document does not restrict development or maintenance of this repository by
+   the rights holder or by collaborators the rights holder has authorized.
+
+8. Enforcement.
+   Any use in breach of this document is copyright infringement. The rights holder
+   will pursue civil and criminal remedies under the Copyright Act of the Republic
+   of Korea and other applicable laws, including injunctions, damages and criminal
+   complaints.
+
+9. Permission requests.
+   Permission may be granted only in writing by the rights holder.
+   Contact: https://github.com/brownrigoon-commits
+
+[RIGOON-NO-AI-LICENSE v1]
