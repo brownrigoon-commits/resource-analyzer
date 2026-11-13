@@ -254,7 +254,7 @@ Actions 산출물은 30일 보관되므로 영구 보관은 버전별 E 백업�
 
 ## 라이선스
 
-[MIT License](LICENSE). 오류 제보와 개선 제안은 [GitHub Issues](https://github.com/brownrigoon-commits/resource-analyzer/issues)를 이용해 주세요. 제보에 측정 기록이나 화면을 첨부할 때에는 개인 정보가 없는지 확인해 주세요.
+[독점 라이선스 — AI 이용 금지](LICENSE). GitHub Releases의 공식 실행 파일은 누구나 설치해 그대로 쓸 수 있지만, 소스 코드의 복제·수정·재배포와 AI 학습·복제는 금지합니다. 오류 제보와 개선 제안은 [GitHub Issues](https://github.com/brownrigoon-commits/resource-analyzer/issues)를 이용해 주세요. 제보에 측정 기록이나 화면을 첨부할 때에는 개인 정보가 없는지 확인해 주세요.
 
 ### 장치별 카드 (0.7.0)
 
